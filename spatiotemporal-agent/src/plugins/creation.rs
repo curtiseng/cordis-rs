@@ -128,11 +128,12 @@ impl Component for CreationTools {
             register(
                 &tools,
                 "run_patch",
-                "试跑一层 patch YAML（立即热装，不持久化；失败则回滚该层）",
+                "试跑一层 patch YAML（按审批策略可能需界面批准）",
                 tool_schema::run_patch_schema(),
                 {
                     let runtime = runtime.clone();
-                    move |args| run_patch(&runtime, args)
+                    let approvals = approvals.clone();
+                    move |args| run_patch(&runtime, &approvals, args)
                 },
             );
             register(
@@ -372,10 +373,33 @@ fn finish_propose(
     ))
 }
 
-fn run_patch(runtime: &AgentRuntime, args: &str) -> Result<String> {
+fn run_patch(runtime: &AgentRuntime, approvals: &ApprovalQueue, args: &str) -> Result<String> {
     let value = parse_json_args(args)?;
     let yaml = arg_str(&value, "patch")?;
     let layer = parse_patches(yaml)?;
+    let id = value
+        .get("id")
+        .and_then(Value::as_str)
+        .unwrap_or("patch-run")
+        .to_owned();
+
+    if approvals.requires("patch") {
+        let preview: String = yaml.chars().take(1200).collect();
+        let lines = yaml.lines().count();
+        approvals.propose_install(
+            id,
+            "patch".into(),
+            format!("试跑 patch（{} 条）", layer.len()),
+            preview,
+            Some(lines),
+            layer,
+            None,
+        )?;
+        return Ok(
+            "已提交 patch 试跑请求。请用户在浏览器界面点击「批准」后才会热装。".into(),
+        );
+    }
+
     let applied = runtime.push_layer(layer)?;
     Ok(format!(
         "已试跑 patch（{} 条）\ncreated={:?} updated={:?} removed={:?}\n\

@@ -13,6 +13,7 @@
 
 mod approval;
 mod chat;
+mod compaction;
 mod host;
 mod keys;
 mod patch_yaml;
@@ -59,13 +60,7 @@ fn main() {
         });
         layers.push(parse_patches(&text).unwrap_or_else(|error| panic!("{error}")));
     }
-    if creation {
-        let patch_path = root_dir().join("cordis.creation.yml");
-        let text = fs::read_to_string(&patch_path).unwrap_or_else(|error| {
-            panic!("读不了 {}：{error}", patch_path.display());
-        });
-        layers.push(parse_patches(&text).unwrap_or_else(|error| panic!("{error}")));
-    }
+    let start_in_creation = creation && !smoke;
     if let Some(path) = &doc_path {
         let path = if path.is_absolute() {
             path.clone()
@@ -106,6 +101,12 @@ fn main() {
     runtime
         .apply()
         .unwrap_or_else(|error| panic!("装配失败：{error}"));
+
+    if start_in_creation {
+        runtime
+            .set_creation_mode(true)
+            .unwrap_or_else(|error| panic!("开启创造模式失败：{error}"));
+    }
 
     let surface = lookup_surface(&runtime.root()).unwrap_or_else(|| {
         panic!("没有界面插件。配置里需要一行提供 surface 的组件（web 或 probe）。");

@@ -1,0 +1,15 @@
+# 示例 patch：复制到仓库根 cordis.patch.yml 后重启 agent，或在创造模式 reload_patch。
+# patch 的 name 是断言不是赋值——对不上 registry 的名字会整条跳过。
+
+# 禁用 cite，改用 stats 做文档分析（stats 已在 cordis.yml 默认启用，这里仅演示 patch 形状）：
+# - id: cite
+#   disabled: true
+
+# 子进程 guest 示例（需先编 crates/spatiotemporal-process/scripts/build-guests.sh）：
+# - insert:
+#     - id: process-probe
+#       name: process
+#       config:
+#         command: crates/spatiotemporal-process/target/guests/probe
+#         grant: [markdown]
+#         role: 子进程 probe（demo）

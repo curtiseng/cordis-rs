@@ -23,7 +23,6 @@ pub struct Web {
     pub port: u16,
     pub tools: Toolbox,
     pub roster: Roster,
-    pub creation: bool,
     pub approvals: ApprovalQueue,
     pub runtime: Rc<AgentRuntime>,
     pub reload_rx: Rc<RefCell<Option<Receiver<()>>>>,
@@ -38,7 +37,6 @@ struct WebSurface {
     agent_loop: Rc<dyn AgentLoop>,
     doc: Rc<dyn Document>,
     workspace: String,
-    creation: bool,
     approvals: ApprovalQueue,
     runtime: Rc<AgentRuntime>,
     reload_rx: Rc<RefCell<Option<Receiver<()>>>>,
@@ -63,7 +61,6 @@ impl Surface for WebSurface {
             agent_loop: &*self.agent_loop,
             doc: &*self.doc,
             workspace: &self.workspace,
-            creation: self.creation,
             approvals: &self.approvals,
             runtime: &self.runtime,
             reload_rx: self.reload_rx.clone(),
@@ -91,7 +88,6 @@ impl Component for Web {
         let port = self.port;
         let tools = self.tools.clone();
         let roster = self.roster.clone();
-        let creation = self.creation;
         let approvals = self.approvals.clone();
         let runtime = self.runtime.clone();
         let reload_rx = self.reload_rx.clone();
@@ -110,7 +106,6 @@ impl Component for Web {
                 agent_loop,
                 doc,
                 workspace,
-                creation,
                 approvals,
                 runtime,
                 reload_rx,
@@ -130,7 +125,6 @@ struct ServeContext<'a> {
     agent_loop: &'a dyn AgentLoop,
     doc: &'a dyn Document,
     workspace: &'a str,
-    creation: bool,
     approvals: &'a ApprovalQueue,
     runtime: &'a AgentRuntime,
     reload_rx: Rc<RefCell<Option<Receiver<()>>>>,
@@ -147,7 +141,6 @@ fn serve(ctx: ServeContext<'_>) {
         agent_loop,
         doc,
         workspace,
-        creation,
         approvals,
         runtime,
         reload_rx,
@@ -171,15 +164,9 @@ fn serve(ctx: ServeContext<'_>) {
         let response = match (method, url.as_str()) {
             (Method::Get, "/") => html(INDEX),
             (Method::Get, "/api/status") => {
-                let pending = approvals.pending().map(|p| {
-                    json!({
-                        "id": p.id,
-                        "kind": p.kind,
-                        "summary": p.summary,
-                        "source_lines": p.source_lines,
-                        "preview": p.preview,
-                    })
-                });
+                let creation = runtime.creation_enabled();
+                let pending = approvals.pending_all();
+                let policy = approvals.policy();
                 json_ok(json!({
                     "doc": doc.path(),
                     "model": llm.model(),
@@ -188,6 +175,11 @@ fn serve(ctx: ServeContext<'_>) {
                     "creation": creation,
                     "workspace": workspace,
                     "pending": pending,
+                    "pending_count": pending.len(),
+                    "approval_policy": {
+                        "require": policy.require,
+                        "max_queue": policy.max_queue,
+                    },
                     "tools": tools.list().into_iter().map(|t| json!({
                         "name": t.name,
                         "description": t.description,
@@ -215,30 +207,47 @@ fn serve(ctx: ServeContext<'_>) {
                 }
             }
             (Method::Get, "/api/creation/pending") => {
-                let pending = approvals.pending().map(|p| {
-                    json!({
-                        "id": p.id,
-                        "kind": p.kind,
-                        "summary": p.summary,
-                        "source_lines": p.source_lines,
-                        "preview": p.preview,
-                    })
-                });
-                json_ok(json!({ "pending": pending }))
+                let pending = approvals.pending_all();
+                json_ok(json!({ "pending": pending, "count": pending.len() }))
             }
             (Method::Post, "/api/creation/approve") => {
                 let mut body = String::new();
                 let _ = request.as_reader().read_to_string(&mut body);
                 let payload: Value = serde_json::from_str(&body).unwrap_or(json!({}));
                 let approve = payload["approve"].as_bool().unwrap_or(false);
+                let id = payload["id"].as_str();
+                let reason = payload["reason"].as_str();
                 let result = if approve {
-                    approvals.approve(runtime)
+                    approvals.approve(runtime, id)
                 } else {
-                    approvals.reject()
+                    approvals.reject(id, reason)
                 };
                 match result {
                     Ok(message) => json_ok(json!({ "ok": true, "message": message })),
                     Err(error) => json_err(400, &error.to_string()),
+                }
+            }
+            (Method::Post, "/api/mode") => {
+                let mut body = String::new();
+                let _ = request.as_reader().read_to_string(&mut body);
+                let payload: Value = serde_json::from_str(&body).unwrap_or(json!({}));
+                match payload.get("creation").and_then(Value::as_bool) {
+                    None => json_err(400, "需要 JSON 字段 creation: true/false"),
+                    Some(enabled) => match runtime.set_creation_mode(enabled) {
+                        Ok(applied) => json_ok(json!({
+                            "ok": true,
+                            "creation": runtime.creation_enabled(),
+                            "message": if enabled {
+                                "已开启创造模式"
+                            } else {
+                                "已关闭创造模式"
+                            },
+                            "created": applied.created,
+                            "updated": applied.updated,
+                            "removed": applied.removed,
+                        })),
+                        Err(error) => json_err(400, &error.to_string()),
+                    },
                 }
             }
             (Method::Post, "/api/creation/reload-patch") => {
@@ -271,6 +280,7 @@ fn serve(ctx: ServeContext<'_>) {
                         prior = client_history;
                     }
                     let prev_len = prior.len();
+                    let creation = runtime.creation_enabled();
                     let mut turn = agent_loop.run_turn(TurnRequest {
                         llm,
                         tools,

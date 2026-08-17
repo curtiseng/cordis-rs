@@ -54,15 +54,18 @@ export DEEPSEEK_API_KEY=sk-你的key
 cargo run -p spatiotemporal-agent
 ```
 
-**创造模式**（可检视运行时、热装脚本插件）：
+**创造模式**（可运行时切换，不必重启）：
 
 ```bash
-cargo run -p spatiotemporal-agent -- --creation
+cargo run -p spatiotemporal-agent -- --creation   # 启动即创造模式
+# 或标准模式启动后，在浏览器点「标准 / 创造」切换
 ```
 
-看到 `打开 http://127.0.0.1:8787` 后，用浏览器打开。默认读 `assets/sample.md`。可以问「这篇在讲什么可撤销 effect？」，模型应先调 `outline` / `cite` / `read_doc` 再回答；左侧能看到每个工具来自 native / wasm / script 哪一种基质。
+也可 `POST /api/mode`：`{"creation": true}`。
 
-多轮对话会保留 tool 消息，模型能记住之前调用了哪些工具。会话持久化到工作区 `.agent/sessions/*.jsonl`（浏览器 localStorage 保存 session id，刷新后自动恢复）。
+看到 `打开 http://127.0.0.1:8787` 后，用浏览器打开。默认读 `assets/sample.md`（demo  tour，含四种基质与工具场景说明）。界面里有**试玩按钮**；完整脚本见 [`DEMO.md`](DEMO.md)。
+
+多轮对话会保留 tool 消息，模型能记住之前调用了哪些工具。会话持久化到工作区 `.agent/sessions/*.jsonl`（浏览器 localStorage 保存 session id，刷新后自动恢复）。`agent-loop` 会在上下文过长时按 `cordis.yml` 的 `compaction` 配置压缩 history（截断 tool 输出、保留最近 N 条）。
 
 在工作区根目录放 `AGENTS.md` 可注入项目级指令；`system-prompt` 插件还会把各工具的 JSON schema 写进 system prompt。
 
@@ -99,13 +102,14 @@ cargo run -p spatiotemporal-agent -- --smoke
 | `read-doc` | `read-doc` | native | 工具 `read_doc` |
 | `outline` | `wasm` | wasm | 工具 `outline` |
 | `cite` | `script` | script | 工具 `cite` |
+| `stats` | `script` | script | 工具 `stats`（字数/标题统计） |
 | `llm` | `deepseek` | native | `llm`（HTTP，不进 wasm） |
 | `ui` | `web` | native | `surface`（听端口） |
 | `creation` | `creation-tools` | native | 创造模式元工具（`--creation` 时启用） |
 
 创造模式额外提供：`inspect_plugins` / `inspect_tools` / `inspect_config` / `define_plugin`（script / wasm / 已有 native）/ `define_script`（`define_plugin` 别名）/ `run_patch` / `revert_patch` / `reload_patch` / `undefine_plugin` / `save_patch`。
 
-`--creation` 还会加载 `cordis.creation.yml`：启用 `patch-watcher`（监视 `cordis.patch.yml` 变更）与 `creation-tools`。动态 patch 与文件 patch 分层：`save_patch` 只持久化动态层；启动时读 `cordis.patch.yml` 作为 file 层。
+`--creation` 还会加载 `cordis.creation.yml`：启用 `approval-policy`（script/wasm/process/patch 需审批，审计写入 `.agent/approvals.jsonl`）、`patch-watcher` 与 `creation-tools`。动态 patch 与文件 patch 分层：`save_patch` 只持久化 dynamic 层；启动时读 `cordis.patch.yml` 作为 file 层。
 
 wasm / script 适合叶子工具：调用稀疏、payload 小、能力面由 WIT / `host.*` 钉死。LLM 适配器和听端口的界面留在 native——前者每次要搬整份对话且需要 HTTP，后者 WASI 里没有「绑 8787」。
 
@@ -122,3 +126,7 @@ wasm / script 适合叶子工具：调用稀疏、payload 小、能力面由 WIT
 
 **只想确认插件装上了**  
 `--smoke`，不听端口。
+
+## Demo 试玩
+
+详见 [`DEMO.md`](DEMO.md)：标准模式三轮（outline/stats、bash、web_fetch）、smoke、创造模式 define/inspect/patch。可选 `cordis.patch.example.yml` 演示 file 层 patch。

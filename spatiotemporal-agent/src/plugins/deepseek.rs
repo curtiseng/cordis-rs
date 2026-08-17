@@ -62,6 +62,20 @@ impl Llm for DeepSeek {
     }
 
     fn complete(&self, body: serde_json::Value) -> Result<serde_json::Value> {
+        let client = self.clone();
+        crate::util::call_with_timeout(std::time::Duration::from_secs(120), move || {
+            client.complete_blocking(body)
+        })
+        .and_then(|text| {
+            serde_json::from_str(&text).map_err(|error| {
+                spatiotemporal::Error::Component(format!("DeepSeek 响应不是 JSON：{error}"))
+            })
+        })
+    }
+}
+
+impl DeepSeek {
+    fn complete_blocking(&self, body: serde_json::Value) -> Result<String> {
         let key = self
             .api_key
             .as_deref()
@@ -75,8 +89,8 @@ impl Llm for DeepSeek {
             .map_err(|error| {
                 spatiotemporal::Error::Component(format!("DeepSeek 请求失败：{error}"))
             })?;
-        response.into_json().map_err(|error| {
-            spatiotemporal::Error::Component(format!("DeepSeek 响应不是 JSON：{error}"))
+        response.into_string().map_err(|error| {
+            spatiotemporal::Error::Component(format!("DeepSeek 响应读取失败：{error}"))
         })
     }
 }

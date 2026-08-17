@@ -5,12 +5,14 @@ use serde_json::{Value, json};
 use spatiotemporal::{Component, Context, KeyId, Result, Steps, Value as StValue};
 
 use crate::chat::{Turn, TurnRequest, finish};
+use crate::compaction::{CompactionConfig, compact};
 use crate::host::{AgentLoop, SystemPrompt};
 use crate::keys::{AgentLoopKey, PromptKey};
 
 /// 本地插件：默认 agent 循环（多轮 tool call）。
 pub struct AgentLoopPlugin {
     pub max_rounds: usize,
+    pub compaction: CompactionConfig,
 }
 
 impl AgentLoopPlugin {
@@ -20,18 +22,25 @@ impl AgentLoopPlugin {
                 .get("max_rounds")
                 .and_then(StValue::as_u64)
                 .unwrap_or(12) as usize,
+            compaction: CompactionConfig::from_config(config),
         }
     }
 }
 
 struct DefaultAgentLoop {
     max_rounds: usize,
+    compaction: CompactionConfig,
     prompt: Option<Rc<dyn SystemPrompt>>,
 }
 
 impl AgentLoop for DefaultAgentLoop {
     fn run_turn(&self, request: TurnRequest<'_>) -> Turn {
-        run_loop(request, self.max_rounds, self.prompt.as_deref())
+        run_loop(
+            request,
+            self.max_rounds,
+            &self.compaction,
+            self.prompt.as_deref(),
+        )
     }
 }
 
@@ -46,10 +55,12 @@ impl Component for AgentLoopPlugin {
 
     fn apply(&self, ctx: Context, _steps: Steps) -> LocalBoxFuture<'_, Result<()>> {
         let max_rounds = self.max_rounds;
+        let compaction = self.compaction.clone();
         Box::pin(async move {
             let prompt = ctx.lookup::<PromptKey>();
             let service: Rc<dyn AgentLoop> = Rc::new(DefaultAgentLoop {
                 max_rounds,
+                compaction,
                 prompt,
             });
             ctx.set::<AgentLoopKey>(service);
@@ -61,6 +72,7 @@ impl Component for AgentLoopPlugin {
 fn run_loop(
     request: TurnRequest<'_>,
     max_rounds: usize,
+    compaction: &CompactionConfig,
     prompt: Option<&dyn SystemPrompt>,
 ) -> Turn {
     let TurnRequest {
@@ -85,6 +97,7 @@ fn run_loop(
     };
 
     let mut messages = vec![json!({ "role": "system", "content": system })];
+    let (history, _report) = compact(history, compaction);
     messages.extend(history.iter().cloned());
     messages.push(json!({ "role": "user", "content": user }));
 

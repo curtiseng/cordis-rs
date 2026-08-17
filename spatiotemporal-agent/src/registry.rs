@@ -15,10 +15,12 @@ use crate::host::{
     process_guest, resolve_path, script_caps, wasm_caps, wasm_guest,
 };
 use crate::host::root_dir;
+use crate::plugins::approval_policy_component;
 use crate::plugins::{
     AgentLoopPlugin, BashSandbox, CreationTools, DeepSeek, DocFile, FsSandbox, PatchWatcher, Probe,
     ReadDoc, SystemPromptPlugin, ToolBash, ToolFs, ToolWebFetch, Web,
 };
+use crate::util::default_workspace_root;
 use crate::runtime::AgentRuntime;
 
 #[derive(Clone)]
@@ -45,7 +47,7 @@ impl Host {
         Host {
             tools: Toolbox::new(),
             roster: Roster::new(),
-            approvals: ApprovalQueue::new(),
+            approvals: ApprovalQueue::new(default_workspace_root()),
             wasm_caps: wasm_caps(),
             script_caps: script_caps(),
             process_caps: process_caps(),
@@ -214,16 +216,11 @@ pub fn registry(host: Host) -> Registry {
                         .and_then(|port| port.parse().ok())
                 })
                 .unwrap_or(8787);
-            let creation = config
-                .get("creation")
-                .and_then(Value::as_bool)
-                .unwrap_or(false);
             Ok(announce(
                 Rc::new(Web {
                     port,
                     tools: host.tools.clone(),
                     roster: host.roster.clone(),
-                    creation,
                     approvals: host.approvals.clone(),
                     runtime,
                     reload_rx: host.reload_rx.clone(),
@@ -231,11 +228,7 @@ pub fn registry(host: Host) -> Registry {
                 }),
                 host.roster.clone(),
                 "native",
-                if creation {
-                    "浏览器界面（创造模式）"
-                } else {
-                    "浏览器界面"
-                },
+                "浏览器界面",
             ))
         });
     }
@@ -251,6 +244,18 @@ pub fn registry(host: Host) -> Registry {
                 host.roster.clone(),
                 "native",
                 "命令行探测界面",
+            ))
+        });
+    }
+
+    {
+        let host = host.clone();
+        registry.add("approval-policy", move |config: &Value| {
+            Ok(announce(
+                approval_policy_component(config, host.approvals.clone()),
+                host.roster.clone(),
+                "native",
+                "创造模式审批策略",
             ))
         });
     }

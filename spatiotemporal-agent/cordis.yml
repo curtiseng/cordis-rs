@@ -29,6 +29,11 @@
   name: agent-loop
   config:
     max_rounds: 12
+    compaction:
+      max_messages: 48
+      max_chars: 64000
+      keep_recent: 24
+      max_tool_chars: 8000
 
 - id: doc
   name: doc
@@ -51,6 +56,13 @@
     file: plugins/cite.js
     grant: [markdown]
     role: 按关键词引用原文
+
+- id: stats
+  name: script
+  config:
+    file: plugins/stats.js
+    grant: [markdown]
+    role: 统计 Markdown 字数与结构
 
 - id: llm
   name: deepseek

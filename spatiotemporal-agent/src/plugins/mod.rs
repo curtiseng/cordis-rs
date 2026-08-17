@@ -1,4 +1,5 @@
 mod agent_loop;
+pub mod approval_policy;
 mod bash_sandbox;
 mod creation;
 mod deepseek;
@@ -14,6 +15,7 @@ mod tool_web_fetch;
 mod web;
 
 pub use agent_loop::AgentLoopPlugin;
+pub use approval_policy::component as approval_policy_component;
 pub use bash_sandbox::BashSandbox;
 pub use creation::CreationTools;
 pub use deepseek::DeepSeek;

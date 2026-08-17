@@ -174,7 +174,7 @@ cargo run -p spatiotemporal-agent -- --creation   # 创造模式
 - **默认文档**：未传路径时读 `spatiotemporal-agent/assets/sample.md`；可用 `read_doc` / `outline` / `cite`。
 - **网络**：`web_fetch` 仅 GET；抓取 crates.io、GitHub raw、论文链接时使用。
 - **bash**：优先 `cargo test`、`cargo clippy`、`./scripts/build-guests.sh` 等；不要 `git push --force` 除非用户明确要求。
-- **创造模式**（`--creation`）：先 `inspect_*` 再看运行时；`define_script` 只提交审批；用户在浏览器点「批准」后才热装。
+- **创造模式**（`--creation` 或浏览器「标准 / 创造」/`POST /api/mode`）：先 `inspect_*` 再看运行时；`define_script` 只提交审批；用户在浏览器点「批准」后才热装。
 - **回答语言**：中文；代码与路径保持英文。
 
 ---
@@ -187,12 +187,13 @@ cargo run -p spatiotemporal-agent -- --creation   # 创造模式
 | `ctx.sessions` 完整事件流 | JSONL 消息子集 + deriveMessages |
 | `ctx.systemPrompt` 分段装配 | `system-prompt` 插件（AGENTS.md + schema） |
 | `ctx.agentLoop` 可替换 | `agent-loop` 插件 |
-| tool-cordis 审批 + preset | `define_plugin` + 审批门；合法 `save_patch` YAML；`patch-watcher` 热重载 |
+| tool-cordis 审批 + preset | `approval-policy` 插件 + 多队列 + 审计 JSONL；`run_patch` 门控 |
 | web_search / MCP / subagent | 未实现 |
 | sandbox-policy / permission-presets | fs/bash 工作区沙箱 only |
 | 异步 session 事件流 | `tiny_http` 同步阻塞 |
+| 运行时 profile 切换 | 浏览器 / `POST /api/mode` 热对账创造层 |
 
-路线图：P0（已完成）→ P1（web_fetch、session、agent-loop、system-prompt）→ P2（合法 patch YAML、配置 watch、**子进程基质**）→ P3（完整 approval policy、compaction、多线程）。
+路线图：P0–P2（已完成）→ **P3 agent 层（进行中/部分完成）**：审批策略、session compaction、LLM 后台线程；**P3 内核待做**：`Send` 执行器与多线程 Loader。
 
 ---
 

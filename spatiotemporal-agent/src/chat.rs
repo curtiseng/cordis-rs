@@ -66,8 +66,8 @@ pub fn fallback_system_prompt(
     if creation {
         prompt.push_str(
             "【创造模式】可用 inspect_plugins / inspect_tools / inspect_config 查看运行时；\
-             define_script 只会提交安装请求，必须等用户在浏览器点击「批准」后才会热装；\
-             undefine_plugin 禁用；save_patch 持久化。\n",
+             define_plugin / run_patch 按审批策略提交安装或试跑请求，必须等用户在浏览器点击「批准」；\
+             revert_patch 撤销动态层；undefine_plugin 禁用；save_patch 持久化。\n",
         );
     }
     prompt

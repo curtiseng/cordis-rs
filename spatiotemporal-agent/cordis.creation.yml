@@ -7,6 +7,11 @@
     creation: true
 
 - insert:
+    - id: approval-policy
+      name: approval-policy
+      config:
+        require: [script, wasm, process, patch]
+        max_queue: 10
     - id: patch-watcher
       name: patch-watcher
       config:
