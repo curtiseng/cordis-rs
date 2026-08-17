@@ -215,10 +215,12 @@ guest 还可以 `host.registerTool(name, description, fn)` 和 `host.registerLlm
 | `web` | native | `surface`（浏览器） |
 | `probe` | native | `surface`（打印工具并退出） |
 
+启动步骤、环境变量和常见问题见 [`spatiotemporal-agent/README.md`](spatiotemporal-agent/README.md)。API Key 只放进环境变量，不要写进 yaml 或提交到 git。
+
 ```bash
 cd spatiotemporal-agent
 ./scripts/build-guests.sh
-export DEEPSEEK_API_KEY=sk-...
+export DEEPSEEK_API_KEY=sk-你的key
 cargo run -p spatiotemporal-agent
 # 打开 http://127.0.0.1:8787
 ```

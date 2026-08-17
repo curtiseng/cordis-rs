@@ -6,3 +6,5 @@
 /crates/*/guests/*/target
 /spatiotemporal-agent/target
 /spatiotemporal-agent/guests/*/target
+.env
+spatiotemporal-agent/.env
