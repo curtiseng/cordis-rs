@@ -7,6 +7,10 @@
     creation: true
 
 - insert:
+    - id: patch-watcher
+      name: patch-watcher
+      config:
+        path: cordis.patch.yml
     - id: creation
       name: creation-tools
       config:

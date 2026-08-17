@@ -1,4 +1,27 @@
 use std::path::{Path, PathBuf};
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
+
+/// 在独立线程里跑阻塞工具，超时则返回错误。
+pub fn call_with_timeout<F>(timeout: Duration, f: F) -> spatiotemporal::Result<String>
+where
+    F: FnOnce() -> spatiotemporal::Result<String> + Send + 'static,
+{
+    let (tx, rx) = mpsc::sync_channel(1);
+    thread::spawn(move || {
+        let _ = tx.send(f());
+    });
+    match rx.recv_timeout(timeout) {
+        Ok(result) => result,
+        Err(mpsc::RecvTimeoutError::Timeout) => Err(spatiotemporal::Error::Component(format!(
+            "工具超时（>{timeout:?}）"
+        ))),
+        Err(mpsc::RecvTimeoutError::Disconnected) => {
+            Err(spatiotemporal::Error::Component("工具线程异常退出".into()))
+        }
+    }
+}
 
 /// 默认工作区：环境变量 `WORKSPACE`，否则当前工作目录。
 pub fn default_workspace_root() -> PathBuf {

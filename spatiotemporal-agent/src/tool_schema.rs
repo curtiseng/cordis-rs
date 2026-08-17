@@ -115,3 +115,48 @@ pub fn inspect_config_schema() -> Value {
         }
     })
 }
+
+pub fn web_fetch_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "url": { "type": "string", "description": "http:// 或 https:// 开头的 URL" }
+        },
+        "required": ["url"]
+    })
+}
+
+pub fn define_plugin_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "id": { "type": "string", "description": "配置行 id" },
+            "name": { "type": "string", "description": "registry 名：script / wasm / tool-fs 等" },
+            "source": { "type": "string", "description": "script 必填：完整 JS 源码" },
+            "guest": { "type": "string", "description": "wasm 必填：guest 名（对应 target/guests/{guest}.wasm）" },
+            "grant": { "type": "array", "items": { "type": "string" } },
+            "config": { "type": "object", "description": "其它插件类型的 config 字段" },
+            "role": { "type": "string", "description": "可选说明" }
+        },
+        "required": ["id"]
+    })
+}
+
+pub fn run_patch_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "patch": { "type": "string", "description": "完整 patch 层 YAML（顶层数组）" }
+        },
+        "required": ["patch"]
+    })
+}
+
+pub fn reload_patch_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "path": { "type": "string", "description": "可选，默认 cordis.patch.yml" }
+        }
+    })
+}

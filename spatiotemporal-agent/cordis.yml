@@ -17,6 +17,19 @@
 - id: tool-bash
   name: tool-bash
 
+- id: tool-web-fetch
+  name: tool-web-fetch
+
+- id: system-prompt
+  name: system-prompt
+  config:
+    agents_file: AGENTS.md
+
+- id: agent-loop
+  name: agent-loop
+  config:
+    max_rounds: 12
+
 - id: doc
   name: doc
   config:

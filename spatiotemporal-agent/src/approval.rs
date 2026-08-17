@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::fs;
+use std::path::PathBuf;
 use std::rc::Rc;
 
 use spatiotemporal::{Patch, Result};
@@ -8,18 +9,19 @@ use crate::host::root_dir;
 use crate::runtime::AgentRuntime;
 
 #[derive(Clone, serde::Serialize)]
-pub struct PendingScript {
+pub struct PendingInstall {
     pub id: String,
-    pub file: String,
-    pub role: String,
-    pub source_lines: usize,
+    pub kind: String,
+    pub summary: String,
     pub preview: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_lines: Option<usize>,
 }
 
 struct Pending {
-    script: PendingScript,
+    install: PendingInstall,
     layer: Vec<Patch>,
-    rel_path: String,
+    cleanup_path: Option<PathBuf>,
 }
 
 #[derive(Clone, Default)]
@@ -32,38 +34,40 @@ impl ApprovalQueue {
         ApprovalQueue::default()
     }
 
-    pub fn pending(&self) -> Option<PendingScript> {
-        self.inner.borrow().as_ref().map(|p| p.script.clone())
+    pub fn pending(&self) -> Option<PendingInstall> {
+        self.inner.borrow().as_ref().map(|p| p.install.clone())
     }
 
-    pub fn propose(
+    #[allow(clippy::too_many_arguments)]
+    pub fn propose_install(
         &self,
         id: String,
-        rel_path: String,
-        role: String,
-        source: String,
+        kind: String,
+        summary: String,
+        preview: String,
+        source_lines: Option<usize>,
         layer: Vec<Patch>,
-    ) -> Result<PendingScript> {
+        cleanup_path: Option<PathBuf>,
+    ) -> Result<PendingInstall> {
         if self.inner.borrow().is_some() {
             return Err(spatiotemporal::Error::Component(
                 "已有一条待审批的安装请求，请先处理".into(),
             ));
         }
 
-        let preview: String = source.chars().take(800).collect();
-        let script = PendingScript {
+        let install = PendingInstall {
             id: id.clone(),
-            file: rel_path.clone(),
-            role,
-            source_lines: source.lines().count(),
+            kind,
+            summary,
             preview,
+            source_lines,
         };
         *self.inner.borrow_mut() = Some(Pending {
-            script: script.clone(),
+            install: install.clone(),
             layer,
-            rel_path,
+            cleanup_path,
         });
-        Ok(script)
+        Ok(install)
     }
 
     pub fn approve(&self, runtime: &AgentRuntime) -> Result<String> {
@@ -75,7 +79,7 @@ impl ApprovalQueue {
         let applied = runtime.push_layer(pending.layer)?;
         Ok(format!(
             "已批准并热装 `{}`（{}）\ncreated={:?} updated={:?}",
-            pending.script.id, pending.script.file, applied.created, applied.updated
+            pending.install.id, pending.install.summary, applied.created, applied.updated
         ))
     }
 
@@ -85,12 +89,18 @@ impl ApprovalQueue {
             .borrow_mut()
             .take()
             .ok_or_else(|| spatiotemporal::Error::Component("没有待审批的安装".into()))?;
-        let path = root_dir().join(&pending.rel_path);
-        if path.exists() {
-            fs::remove_file(&path).map_err(|error| {
-                spatiotemporal::Error::Component(format!("删不掉 {}：{error}", path.display()))
-            })?;
+        if let Some(path) = pending.cleanup_path {
+            let full = if path.is_absolute() {
+                path
+            } else {
+                root_dir().join(path)
+            };
+            if full.exists() {
+                fs::remove_file(&full).map_err(|error| {
+                    spatiotemporal::Error::Component(format!("删不掉 {}：{error}", full.display()))
+                })?;
+            }
         }
-        Ok(format!("已拒绝 `{}`，临时文件已删除", pending.script.id))
+        Ok(format!("已拒绝 `{}`", pending.install.id))
     }
 }

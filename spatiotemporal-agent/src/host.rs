@@ -40,6 +40,23 @@ pub trait Surface {
     fn run(&self);
 }
 
+/// 组装 system prompt（`system-prompt` 插件提供）。
+pub struct PromptInput<'a> {
+    pub workspace: &'a str,
+    pub doc_path: Option<&'a str>,
+    pub creation: bool,
+    pub tools: &'a Toolbox,
+}
+
+pub trait SystemPrompt {
+    fn build(&self, input: PromptInput<'_>) -> String;
+}
+
+/// 可插拔 agent 循环（`agent-loop` 插件提供）。
+pub trait AgentLoop {
+    fn run_turn(&self, request: crate::chat::TurnRequest<'_>) -> crate::chat::Turn;
+}
+
 pub struct PluginInfo {
     pub name: String,
     pub substrate: String,
@@ -242,6 +259,20 @@ impl spatiotemporal_script::ToolHost for Toolbox {
     }
 }
 
+impl spatiotemporal_process::ToolHost for Toolbox {
+    fn register(
+        &self,
+        name: String,
+        description: String,
+        invoke: spatiotemporal_process::ToolInvoke,
+    ) {
+        self.insert(name, description, "process", invoke);
+    }
+    fn unregister(&self, name: &str) {
+        self.remove(name);
+    }
+}
+
 /// guest 的 `registerLlm` 落到 `llm` 这个键上。
 pub struct LlmInstaller;
 
@@ -263,6 +294,18 @@ impl spatiotemporal_script::LlmHost for LlmInstaller {
         ctx: &Context,
         model: String,
         invoke: spatiotemporal_script::ToolInvoke,
+    ) -> Result<()> {
+        ctx.set::<LlmKey>(Rc::new(GuestLlm { model, invoke }) as Rc<dyn Llm>);
+        Ok(())
+    }
+}
+
+impl spatiotemporal_process::LlmHost for LlmInstaller {
+    fn install(
+        &self,
+        ctx: &Context,
+        model: String,
+        invoke: spatiotemporal_process::ToolInvoke,
     ) -> Result<()> {
         ctx.set::<LlmKey>(Rc::new(GuestLlm { model, invoke }) as Rc<dyn Llm>);
         Ok(())
@@ -299,6 +342,12 @@ pub fn script_caps() -> Rc<spatiotemporal_script::Capabilities> {
     Rc::new(caps)
 }
 
+pub fn process_caps() -> Rc<spatiotemporal_process::Capabilities> {
+    let mut caps = spatiotemporal_process::Capabilities::new();
+    caps.expose::<crate::keys::Doc, _>(|doc| doc.text());
+    Rc::new(caps)
+}
+
 pub fn root_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
@@ -307,6 +356,10 @@ pub fn wasm_guest(name: &str) -> PathBuf {
     root_dir()
         .join("target/guests")
         .join(format!("{name}.wasm"))
+}
+
+pub fn process_guest(name: &str) -> PathBuf {
+    root_dir().join("target/guests").join(name)
 }
 
 pub fn resolve_path(path: &str) -> PathBuf {

@@ -320,6 +320,8 @@
     const logEl = document.getElementById("log");
     const emptyEl = document.getElementById("empty");
     const history = [];
+    const SESSION_KEY = "spatiotemporal-session";
+    let sessionId = localStorage.getItem(SESSION_KEY) || "";
     const $ = (sel) => document.querySelector(sel);
 
     function card(item, extra) {
@@ -329,6 +331,19 @@
         <div class="name">${escapeHtml(item.name)}</div>
         <div class="meta">${escapeHtml(item.substrate)} · ${escapeHtml(extra || item.description || item.role || "")}</div>`;
       return div;
+    }
+
+    async function loadSession() {
+      if (!sessionId) return;
+      try {
+        const res = await fetch(`/api/session?session_id=${encodeURIComponent(sessionId)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        history.length = 0;
+        history.push(...(data.history || []));
+      } catch {
+        /* 忽略 */
+      }
     }
 
     async function refreshStatus() {
@@ -351,7 +366,8 @@
       }
       panel.hidden = false;
       $("#approval-meta").textContent =
-        `${pending.id} → ${pending.file} · ${pending.role} · ${pending.source_lines} 行`;
+        `${pending.id} [${pending.kind || "?"}] → ${pending.summary || pending.file || ""}` +
+        (pending.source_lines ? ` · ${pending.source_lines} 行` : "");
       $("#approval-preview").textContent = pending.preview || "";
     }
 
@@ -377,6 +393,7 @@
 
     async function boot() {
       const status = await refreshStatus();
+      await loadSession();
       (status.plugins || []).forEach((p) => $("#plugins").appendChild(card(p, p.role)));
       (status.tools || []).forEach((t) => $("#tools").appendChild(card(t)));
       const bus = $("#bus");
@@ -442,7 +459,7 @@
         const res = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: text, history }),
+          body: JSON.stringify({ message: text, history, session_id: sessionId || undefined }),
         });
         const turn = await res.json();
         wait.remove();
@@ -451,6 +468,10 @@
           add("系统", turn.error, "err");
         } else {
           add("讲解员", turn.reply || turn.error || "没有回复");
+        }
+        if (turn.session_id) {
+          sessionId = turn.session_id;
+          localStorage.setItem(SESSION_KEY, sessionId);
         }
         if (Array.isArray(turn.history)) {
           history.length = 0;

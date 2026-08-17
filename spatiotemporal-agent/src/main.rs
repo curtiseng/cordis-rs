@@ -15,9 +15,11 @@ mod approval;
 mod chat;
 mod host;
 mod keys;
+mod patch_yaml;
 mod plugins;
 mod registry;
 mod runtime;
+mod session;
 mod tool_schema;
 mod util;
 
@@ -93,6 +95,13 @@ fn main() {
         layers,
     ));
     *host.runtime.borrow_mut() = Some(runtime.clone());
+
+    let patch_path = root_dir().join("cordis.patch.yml");
+    if patch_path.exists()
+        && let Err(error) = runtime.load_patch_file(&patch_path)
+    {
+        eprintln!("! 读 patch 失败：{error}");
+    }
 
     runtime
         .apply()

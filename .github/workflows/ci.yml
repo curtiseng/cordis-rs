@@ -60,6 +60,20 @@ jobs:
       - run: cargo clippy -p spatiotemporal-script --all-targets -- -D warnings
       - run: cargo test -p spatiotemporal-script
 
+  # 子进程适配器：测试要真的 guest 可执行文件。
+  process:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: ./scripts/build-guests.sh
+        working-directory: crates/spatiotemporal-process
+      - run: cargo clippy -p spatiotemporal-process --all-targets -- -D warnings
+      - run: cargo test -p spatiotemporal-process
+
   # 三种基质的 agent 例子：编 outline.wasm，按 cordis.yml 装配，--smoke 叠一层
   # patch 把 LLM 换成脚本 echo、界面换成 probe。不调真实 LLM。
   agent:

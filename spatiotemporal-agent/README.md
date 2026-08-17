@@ -62,7 +62,9 @@ cargo run -p spatiotemporal-agent -- --creation
 
 看到 `打开 http://127.0.0.1:8787` 后，用浏览器打开。默认读 `assets/sample.md`。可以问「这篇在讲什么可撤销 effect？」，模型应先调 `outline` / `cite` / `read_doc` 再回答；左侧能看到每个工具来自 native / wasm / script 哪一种基质。
 
-多轮对话会保留 tool 消息，模型能记住之前调用了哪些工具。
+多轮对话会保留 tool 消息，模型能记住之前调用了哪些工具。会话持久化到工作区 `.agent/sessions/*.jsonl`（浏览器 localStorage 保存 session id，刷新后自动恢复）。
+
+在工作区根目录放 `AGENTS.md` 可注入项目级指令；`system-prompt` 插件还会把各工具的 JSON schema 写进 system prompt。
 
 换一篇自己的文档（路径相对当前工作目录）：
 
@@ -90,6 +92,9 @@ cargo run -p spatiotemporal-agent -- --smoke
 | `tool-fs` | `tool-fs` | native | 工具 `read` / `write` / `edit` |
 | `bash-sandbox` | `bash-sandbox` | native | `shell` 工作区沙箱 |
 | `tool-bash` | `tool-bash` | native | 工具 `bash` |
+| `tool-web-fetch` | `tool-web-fetch` | native | 工具 `web_fetch` |
+| `system-prompt` | `system-prompt` | native | `system-prompt`（AGENTS.md + schema） |
+| `agent-loop` | `agent-loop` | native | `agent-loop`（可插拔多轮循环） |
 | `doc` | `doc` | native | `markdown` 能力 |
 | `read-doc` | `read-doc` | native | 工具 `read_doc` |
 | `outline` | `wasm` | wasm | 工具 `outline` |
@@ -98,7 +103,9 @@ cargo run -p spatiotemporal-agent -- --smoke
 | `ui` | `web` | native | `surface`（听端口） |
 | `creation` | `creation-tools` | native | 创造模式元工具（`--creation` 时启用） |
 
-创造模式额外提供：`inspect_plugins` / `inspect_tools` / `inspect_config` / `define_script` / `undefine_plugin` / `save_patch`。
+创造模式额外提供：`inspect_plugins` / `inspect_tools` / `inspect_config` / `define_plugin`（script / wasm / 已有 native）/ `define_script`（`define_plugin` 别名）/ `run_patch` / `revert_patch` / `reload_patch` / `undefine_plugin` / `save_patch`。
+
+`--creation` 还会加载 `cordis.creation.yml`：启用 `patch-watcher`（监视 `cordis.patch.yml` 变更）与 `creation-tools`。动态 patch 与文件 patch 分层：`save_patch` 只持久化动态层；启动时读 `cordis.patch.yml` 作为 file 层。
 
 wasm / script 适合叶子工具：调用稀疏、payload 小、能力面由 WIT / `host.*` 钉死。LLM 适配器和听端口的界面留在 native——前者每次要搬整份对话且需要 HTTP，后者 WASI 里没有「绑 8787」。
 

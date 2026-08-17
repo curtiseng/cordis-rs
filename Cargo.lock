@@ -1578,13 +1578,26 @@ name = "spatiotemporal-agent"
 version = "0.4.0"
 dependencies = [
  "futures",
+ "notify",
  "serde",
  "serde_json",
+ "serde_yaml_ng",
  "spatiotemporal",
+ "spatiotemporal-process",
  "spatiotemporal-script",
  "spatiotemporal-wasm",
  "tiny_http",
  "ureq",
+]
+
+[[package]]
+name = "spatiotemporal-process"
+version = "0.4.0"
+dependencies = [
+ "futures",
+ "serde",
+ "serde_json",
+ "spatiotemporal",
 ]
 
 [[package]]

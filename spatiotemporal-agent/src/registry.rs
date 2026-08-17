@@ -1,19 +1,23 @@
 use std::cell::RefCell;
 use std::fs;
+use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::mpsc::{Receiver, Sender};
 
 use spatiotemporal::{Component, Error, Registry, Value};
 use spatiotemporal_script::ScriptPlugin;
+use spatiotemporal_process::ProcessPlugin;
 use spatiotemporal_wasm::WasmPlugin;
 
 use crate::approval::ApprovalQueue;
 use crate::host::{
-    Announcing, LlmInstaller, Roster, Toolbox, config_str, grant_list, resolve_path, script_caps,
-    wasm_caps, wasm_guest,
+    Announcing, LlmInstaller, Roster, Toolbox, config_str, grant_list, process_caps,
+    process_guest, resolve_path, script_caps, wasm_caps, wasm_guest,
 };
+use crate::host::root_dir;
 use crate::plugins::{
-    BashSandbox, CreationTools, DeepSeek, DocFile, FsSandbox, Probe, ReadDoc, ToolBash, ToolFs,
-    Web,
+    AgentLoopPlugin, BashSandbox, CreationTools, DeepSeek, DocFile, FsSandbox, PatchWatcher, Probe,
+    ReadDoc, SystemPromptPlugin, ToolBash, ToolFs, ToolWebFetch, Web,
 };
 use crate::runtime::AgentRuntime;
 
@@ -24,23 +28,34 @@ pub struct Host {
     pub approvals: ApprovalQueue,
     pub wasm_caps: Rc<spatiotemporal_wasm::Capabilities>,
     pub script_caps: Rc<spatiotemporal_script::Capabilities>,
+    pub process_caps: Rc<spatiotemporal_process::Capabilities>,
     pub llm_wasm: Rc<dyn spatiotemporal_wasm::LlmHost>,
     pub llm_script: Rc<dyn spatiotemporal_script::LlmHost>,
+    pub llm_process: Rc<dyn spatiotemporal_process::LlmHost>,
     pub runtime: Rc<RefCell<Option<Rc<AgentRuntime>>>>,
+    pub reload_tx: Rc<RefCell<Option<Sender<()>>>>,
+    pub reload_rx: Rc<RefCell<Option<Receiver<()>>>>,
+    pub patch_path: Rc<RefCell<PathBuf>>,
 }
 
 impl Host {
     pub fn new() -> Self {
         let installer = Rc::new(LlmInstaller);
+        let (reload_tx, reload_rx) = std::sync::mpsc::channel();
         Host {
             tools: Toolbox::new(),
             roster: Roster::new(),
             approvals: ApprovalQueue::new(),
             wasm_caps: wasm_caps(),
             script_caps: script_caps(),
+            process_caps: process_caps(),
             llm_wasm: installer.clone() as Rc<dyn spatiotemporal_wasm::LlmHost>,
-            llm_script: installer as Rc<dyn spatiotemporal_script::LlmHost>,
+            llm_script: installer.clone() as Rc<dyn spatiotemporal_script::LlmHost>,
+            llm_process: installer as Rc<dyn spatiotemporal_process::LlmHost>,
             runtime: Rc::new(RefCell::new(None)),
+            reload_tx: Rc::new(RefCell::new(Some(reload_tx))),
+            reload_rx: Rc::new(RefCell::new(Some(reload_rx))),
+            patch_path: Rc::new(RefCell::new(root_dir().join("cordis.patch.yml"))),
         }
     }
 }
@@ -96,6 +111,44 @@ pub fn registry(host: Host) -> Registry {
                 host.roster.clone(),
                 "native",
                 "登记 bash 工具",
+            ))
+        });
+    }
+
+    {
+        let host = host.clone();
+        registry.add("tool-web-fetch", move |_config: &Value| {
+            Ok(announce(
+                Rc::new(ToolWebFetch {
+                    tools: host.tools.clone(),
+                }),
+                host.roster.clone(),
+                "native",
+                "登记 web_fetch 工具",
+            ))
+        });
+    }
+
+    {
+        let host = host.clone();
+        registry.add("system-prompt", move |config: &Value| {
+            Ok(announce(
+                Rc::new(SystemPromptPlugin::from_config(config)),
+                host.roster.clone(),
+                "native",
+                "组装 system prompt（AGENTS.md + 工具 schema）",
+            ))
+        });
+    }
+
+    {
+        let host = host.clone();
+        registry.add("agent-loop", move |config: &Value| {
+            Ok(announce(
+                Rc::new(AgentLoopPlugin::from_config(config)),
+                host.roster.clone(),
+                "native",
+                "可插拔 agent 循环",
             ))
         });
     }
@@ -173,6 +226,8 @@ pub fn registry(host: Host) -> Registry {
                     creation,
                     approvals: host.approvals.clone(),
                     runtime,
+                    reload_rx: host.reload_rx.clone(),
+                    patch_path: host.patch_path.borrow().clone(),
                 }),
                 host.roster.clone(),
                 "native",
@@ -202,6 +257,34 @@ pub fn registry(host: Host) -> Registry {
 
     {
         let host = host.clone();
+        registry.add("patch-watcher", move |config: &Value| {
+            let runtime = host
+                .runtime
+                .borrow()
+                .clone()
+                .ok_or_else(|| Error::Config("patch-watcher 需要 AgentRuntime".into()))?;
+            if let Some(path) = config.get("path").and_then(Value::as_str) {
+                *host.patch_path.borrow_mut() = if PathBuf::from(path).is_absolute() {
+                    PathBuf::from(path)
+                } else {
+                    root_dir().join(path)
+                };
+            }
+            Ok(announce(
+                Rc::new(PatchWatcher::from_config(
+                    config,
+                    runtime,
+                    host.reload_tx.clone(),
+                )),
+                host.roster.clone(),
+                "native",
+                "监听 cordis.patch.yml 热重载",
+            ))
+        });
+    }
+
+    {
+        let host = host.clone();
         registry.add("creation-tools", move |config: &Value| {
             let runtime = host
                 .runtime
@@ -215,6 +298,7 @@ pub fn registry(host: Host) -> Registry {
                     host.roster.clone(),
                     runtime,
                     host.approvals.clone(),
+                    host.patch_path.borrow().clone(),
                 )),
                 host.roster.clone(),
                 "native",
@@ -272,6 +356,48 @@ pub fn registry(host: Host) -> Registry {
                 host.roster.clone(),
                 "script",
                 config_str(config, "role").unwrap_or("脚本插件"),
+            ))
+        });
+    }
+
+    {
+        let host = host.clone();
+        registry.add("process", move |config: &Value| {
+            let command = config_str(config, "command")
+                .or_else(|| config_str(config, "guest"))
+                .ok_or_else(|| Error::Config("process 需要 config.command 或 guest".into()))?;
+            let path = if PathBuf::from(command).is_absolute() {
+                PathBuf::from(command)
+            } else if command.contains('/') {
+                resolve_path(command)
+            } else {
+                process_guest(command)
+            };
+            let args = config
+                .get("args")
+                .and_then(Value::as_array)
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(|item| item.as_str().map(str::to_owned))
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            let plugin = ProcessPlugin::open(&path, host.process_caps.clone(), grant_list(config))
+                .map_err(|error| {
+                    Error::Config(format!(
+                        "打不开 {}：{error}",
+                        path.display()
+                    ))
+                })?
+                .with_args(args)
+                .with_tools(Rc::new(host.tools.clone()) as Rc<dyn spatiotemporal_process::ToolHost>)
+                .with_llm(host.llm_process.clone());
+            Ok(announce(
+                Rc::new(plugin),
+                host.roster.clone(),
+                "process",
+                config_str(config, "role").unwrap_or("子进程插件"),
             ))
         });
     }

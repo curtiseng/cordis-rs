@@ -199,9 +199,29 @@ cargo test -p spatiotemporal-script
 
 guest 还可以 `host.registerTool(name, description, fn)` 和 `host.registerLlm(model, fn)`（wasm 侧是 WIT 的 `register-tool` / `register-llm` + 导出 `invoke`）。登记本身的逆由宿主持有：脚本把自己的 `unload` 删掉，工具和 LLM 绑定照样会从桌上消失。
 
+## 子进程插件
+
+`crates/spatiotemporal-process` 把 MCP 类可执行 guest 接成一等 fiber。宿主与 guest 用 **NDJSON**（一行一个 JSON）说 `load` / `invoke` / `unload`；跨边界仍是字符串，能力由宿主授予。
+
+```rust
+let plugin = ProcessPlugin::open("plugins/mcp-bridge", Rc::new(caps), vec!["markdown".into()])?
+    .with_args(vec!["--stdio".into()]);
+let handle = ctx.use_component(Rc::new(plugin));
+```
+
+`unload` 不回应时宿主会在墙钟超时后 **kill** 子进程——子进程没有 wasm 燃料，测试里 `guests/runaway` 就是用来钉这条的。
+
+测试要真的 guest 产物：
+
+```bash
+cd crates/spatiotemporal-process
+./scripts/build-guests.sh
+cargo test -p spatiotemporal-process
+```
+
 ## Spatiotemporal Agent
 
-`spatiotemporal-agent/` 在仓库根上。宿主几乎什么都不做：建一张 `Registry`，用 `Loader` 把 `cordis.yml` 对账成一棵 fiber 树。文档、工具、LLM、界面都是插件，基质可以是 native / wasm / script。换实现跟 dsh 一样——关掉旧行再 `insert` 新行，见 `cordis.smoke.yml`。
+`spatiotemporal-agent/` 在仓库根上。宿主几乎什么都不做：建一张 `Registry`，用 `Loader` 把 `cordis.yml` 对账成一棵 fiber 树。文档、工具、LLM、界面都是插件，基质可以是 native / wasm / script / process。换实现跟 dsh 一样——关掉旧行再 `insert` 新行，见 `cordis.smoke.yml`。
 
 | 配置里的 `name` | 基质 | 提供 |
 |---|---|---|
@@ -338,8 +358,7 @@ cargo run -p spatiotemporal-agent
 - **没有热模块替换**（5.2.2 节）。这在 Rust 里没有好答案，见论文 6.4 节：原生代码没有模块注册表，`dlopen`/`dlclose` 会撞上 `TypeId` 跨编译单元不一致、卸载时悬垂 vtable 等问题；wasm 组件模型更干净但要付序列化边界的代价。**注意这跟配置热重载是两件事**——后者已经在了，而且它才是长驻进程真正需要的那件（dsh 在两个发行形态里都把宿主端模块 HMR 关掉了，却给配置层补挂一个只看配置的 watcher）。
 - **没有服务代理**（6.2 节），因此没有负载均衡、滚动更新与跨进程调用。
 - **没有过程宏**，`inject` 仍是运行时声明。
-- **wasm / 脚本适配器只到叶子服务。** guest 可以登记工具（`register-tool` / `registerTool`）或把自己登记成 LLM（`register-llm` / `registerLlm`），还不能引入**新的** coeffect 种类给原生插件消费，也不能收事件。三条不会变的限制：大 payload 过边界要付序列化代价，逆必须可抢占，以及 `Rc<dyn Trait>` 的 trait 必须在宿主编译期存在。
-- **子进程基质还没做。** MCP 那类远程插件需要一个 crate，而且需要宿主接一个带 IO 的执行器进来。
+- **wasm / 脚本 / 子进程适配器只到叶子服务。** guest 可以登记工具或把自己登记成 LLM，还不能引入**新的** coeffect 种类给原生插件消费，也不能收事件。子进程基质在 `crates/spatiotemporal-process`；MCP 桥接仍要宿主自己写 guest 可执行文件。
 
 ## 许可
 
