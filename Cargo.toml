@@ -12,8 +12,8 @@ exclude = [".github/", ".idea/", ".gitignore"]
 
 [workspace]
 members = ["crates/*"]
-# 平时只编内核。卫星 crate 的 MSRV 比内核高 9 个小版本（wasmtime 47 要 1.94），
-# 想读演算的人不该被迫编译一个 wasm 运行时。CI 里用 --workspace 全都编。
+# 平时只编内核。卫星 crate 的 MSRV 更高（wasmtime 47 要 1.94，rquickjs 要 1.87），
+# 想读演算的人不该被迫编译一个 wasm 运行时或 JS 引擎。CI 里用 --workspace 全都编。
 default-members = ["."]
 
 [workspace.package]

@@ -49,3 +49,15 @@ jobs:
         working-directory: crates/spatiotemporal-wasm
       - run: cargo clippy -p spatiotemporal-wasm --all-targets -- -D warnings
       - run: cargo test -p spatiotemporal-wasm
+
+  # 脚本适配器：rquickjs 要 1.87，guest 就是字符串，不用预编译产物。
+  script:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy -p spatiotemporal-script --all-targets -- -D warnings
+      - run: cargo test -p spatiotemporal-script

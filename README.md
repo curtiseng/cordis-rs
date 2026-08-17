@@ -48,9 +48,10 @@ spatiotemporal = { git = "https://github.com/curtiseng/cordis-rs" }
 Cargo.toml                      # 内核，同时是 workspace 根
 src/ tests/ examples/
 crates/spatiotemporal-wasm/     # wasm 基质适配器，独立版本、独立发布
+crates/spatiotemporal-script/   # QuickJS 脚本基质，模型现写的代码走这里
 ```
 
-`default-members` 只含内核，所以 `cargo test` 不会去编一个 wasm 运行时——内核有 5 个依赖、MSRV 1.85，而 wasmtime 一家就带上百个、要 1.94。但 **lockfile 是整个 workspace 共享的**（`default-members` 只影响编译，不影响解析），所以卫星 crate 理论上能把某个共享依赖的版本拉高、把内核的实际 MSRV 悄悄推上去。CI 里有一个钉在 1.85 上只编内核的 job 专门守这件事。
+`default-members` 只含内核，所以 `cargo test` 不会去编 wasmtime 或 QuickJS——内核有 5 个依赖、MSRV 1.85，而 wasmtime 要 1.94、rquickjs 要 1.87。但 **lockfile 是整个 workspace 共享的**（`default-members` 只影响编译，不影响解析），所以卫星 crate 理论上能把某个共享依赖的版本拉高、把内核的实际 MSRV 悄悄推上去。CI 里有一个钉在 1.85 上只编内核的 job 专门守这件事。
 
 ## 配置热重载
 
@@ -173,6 +174,30 @@ cargo test -p spatiotemporal-wasm
 
 产物不入库——预编译的二进制没法评审也没法复现。测试找不到它会直接失败并让你回来跑这个脚本，而不是静默跳过；跳过会得到一个「绿了但什么都没测」的测试。
 
+## 脚本插件
+
+`crates/spatiotemporal-script` 是同一套口子的另一面：guest 不是 `.wasm` 文件，是**一段字符串**。这是「模型这一轮现写一段代码、当场装上、用完拆掉」那条自进化路径。
+
+```rust
+let plugin = ScriptPlugin::from_source(
+    "dyn-3",
+    r#"
+        export function load() { host.log("装上了 " + host.capability("db")); }
+        export function unload() { host.log("拆掉了"); }
+    "#,
+    Rc::new(caps),
+    vec!["db".into()],
+)?;
+```
+
+能力面与 wasm 那份同形：`host.log`、`host.capability`，guest 导出 `load` / `unload`。语法错误在 `from_source` 就失败，任何 fiber 都还没被动过——这是 loader「先构造再拆除」在脚本基质上的落点。缺 `unload` 当成空操作：模型现写的代码经常忘了清理，fiber 仍须能拆掉。
+
+抢占机制不同。QuickJS 没有指令燃料，用的是 `Runtime::set_interrupt_handler`：引擎定期问一次「该停了吗」，返回 true 就抛出不可捕获的异常。额度是回调次数而不是指令数，所以和 wasm 的 fuel **没有**换算关系。对应的测试同样能跑完本身就是结论。
+
+```bash
+cargo test -p spatiotemporal-script
+```
+
 ## 与论文的对应
 
 | 论文 | 这里 |
@@ -215,7 +240,7 @@ cargo test -p spatiotemporal-wasm
 
 ## 测试对着定理写
 
-`cargo test` 跑 54 个（内核与配置层），`cargo test -p spatiotemporal-wasm` 另跑 7 个。核心库那部分每个都指向论文的一条性质：
+`cargo test` 跑 54 个（内核与配置层），`cargo test -p spatiotemporal-wasm` 另跑 7 个，`cargo test -p spatiotemporal-script` 另跑 8 个。核心库那部分每个都指向论文的一条性质：
 
 | 测试 | 论文 |
 |---|---|
@@ -262,6 +287,18 @@ cargo test -p spatiotemporal-wasm
 | `a_runaway_inverse_is_bounded` | **卡住的逆会被燃料抢占，卸载仍然完成** |
 | `the_adapter_reports_errors_as_component_failures` | wasm 侧的问题以组件失败出现，不是运行时崩溃 |
 
+`crates/spatiotemporal-script/tests/script.rs` 钉的是同一组性质在字符串 guest 上还在，外加一条脚本特有的：
+
+| 测试 | 钉的是 |
+|---|---|
+| `a_script_lives_and_dies_like_any_fiber` | guest 的 `unload` 就是这个 fiber 的逆 |
+| `the_name_is_whatever_the_host_called_it` | 运行时名字，模型现写的代码没有文件名 |
+| `only_granted_capabilities_are_visible` | 能力边界不在 guest 的诚实程度上 |
+| `a_script_waits_for_its_dependency` | 定义 26 对脚本同样成立 |
+| `a_runaway_inverse_is_bounded` | **卡住的逆会被 interrupt handler 抢占** |
+| `the_adapter_reports_errors_as_component_failures` | 语法错误在构造时失败，fiber 还没被动过 |
+| `a_script_without_load_fails_as_a_component` | 没有 `load` 就是普通的组件失败 |
+
 ## 还没有做的
 
 这是 0.3，范围到论文 5.1 节加 5.2.1 节。以下都是明确的缺口，不是疏漏：
@@ -273,8 +310,8 @@ cargo test -p spatiotemporal-wasm
 - **没有热模块替换**（5.2.2 节）。这在 Rust 里没有好答案，见论文 6.4 节：原生代码没有模块注册表，`dlopen`/`dlclose` 会撞上 `TypeId` 跨编译单元不一致、卸载时悬垂 vtable 等问题；wasm 组件模型更干净但要付序列化边界的代价。**注意这跟配置热重载是两件事**——后者已经在了，而且它才是长驻进程真正需要的那件（dsh 在两个发行形态里都把宿主端模块 HMR 关掉了，却给配置层补挂一个只看配置的 watcher）。
 - **没有服务代理**（6.2 节），因此没有负载均衡、滚动更新与跨进程调用。
 - **没有过程宏**，`inject` 仍是运行时声明。
-- **wasm 适配器只到叶子插件。** `spatiotemporal-wasm` 是 0.0.1，能力面就是 `wit/plugin.wit` 里那个 world：一条日志、一次能力读取。guest 还不能提供 coeffect 给别人消费，也不能收事件。三条不管适配器怎么写都不会变的限制：guest 不能引入**新的** coeffect 种类给原生插件消费（`Rc<dyn Trait>` 的 trait 必须在宿主编译期存在，所以 world 决定了 guest 能提供什么，而不是 guest 自己决定），大 payload 的高频事件过边界要付序列化代价（叶子工具是甜点区，流式事件不是），以及 guest 的逆必须可抢占（已经用燃料做了）。
-- **脚本与子进程基质还没做。** QuickJS（模型现写的代码）和子进程（MCP 那类）各自需要一个 crate。子进程那个还需要宿主接一个带 IO 的执行器进来，因为内核本身不含任何 IO。
+- **wasm / 脚本适配器只到叶子插件。** 两个都是 0.0.1，能力面就是一条日志、一次能力读取。guest 还不能提供 coeffect 给别人消费，也不能收事件。三条不管适配器怎么写都不会变的限制：guest 不能引入**新的** coeffect 种类给原生插件消费（`Rc<dyn Trait>` 的 trait 必须在宿主编译期存在），大 payload 的高频事件过边界要付序列化代价，以及 guest 的逆必须可抢占（wasm 用燃料，脚本用 interrupt handler）。
+- **子进程基质还没做。** MCP 那类远程插件需要一个 crate，而且需要宿主接一个带 IO 的执行器进来，因为内核本身不含任何 IO。
 
 ## 许可
 
