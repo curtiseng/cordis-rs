@@ -250,7 +250,7 @@ fn wait_for_change(rx: &Receiver<()>) -> bool {
 }
 
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
-    let dir: PathBuf = std::env::temp_dir().join(format!("cordis-rs-watch-{}", std::process::id()));
+    let dir: PathBuf = std::env::temp_dir().join(format!("spatiotemporal-watch-{}", std::process::id()));
     fs::create_dir_all(&dir)?;
     fs::write(dir.join("cordis.yml"), BASE_YAML)?;
 

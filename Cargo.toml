@@ -1,6 +1,6 @@
 [package]
 name = "spatiotemporal"
-version = "0.3.0"
+version = "0.4.0"
 description = "时空可组合性演算的 Rust 实现：可撤销 effect、响应式 coeffect、fiber 惯性生命周期、声明式配置层"
 keywords = ["plugin", "effects", "coeffects", "composability", "lifecycle"]
 categories = ["rust-patterns", "asynchronous"]
@@ -12,18 +12,18 @@ exclude = [".github/", ".idea/", ".gitignore"]
 
 [workspace]
 members = ["crates/*", "spatiotemporal-agent"]
-# 平时只编内核。卫星 crate 的 MSRV 更高（wasmtime 47 要 1.94，rquickjs 要 1.87），
-# 想读演算的人不该被迫编译一个 wasm 运行时或 JS 引擎。CI 里用 --workspace 全都编。
+# 平时只编内核。卫星 crate 会拉 wasmtime / rquickjs，想读演算的人不该被迫编译它们。
+# CI 里用 --workspace 全都编。
 default-members = ["."]
 
 [workspace.package]
 edition = "2024"
-rust-version = "1.85"
-repository = "https://github.com/curtiseng/cordis-rs"
+rust-version = "1.94"
+repository = "https://github.com/curtiseng/spatiotemporal"
 license = "MIT"
 
 [workspace.dependencies]
-spatiotemporal = { path = ".", version = "0.3" }
+spatiotemporal = { path = ".", version = "0.4" }
 futures = { version = "0.3.34", default-features = false, features = ["std", "executor"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"

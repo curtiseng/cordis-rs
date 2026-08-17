@@ -24,18 +24,16 @@ jobs:
       - run: cargo run --example swap_provider
       - run: cargo run --example watch_config
 
-  # 内核声明 MSRV 1.85，但 lockfile 是整个 workspace 共享的——卫星 crate 拉高某个
-  # 共享依赖的版本，就可能把内核的实际 MSRV 悄悄推上去。这个 job 就是那道哨兵：
-  # 它一红，要么放宽声明，要么把依赖钉回去。
+  # 全 workspace MSRV 1.94。这个 job 钉在最低版本上编内核，防止 lockfile 漂移。
   msrv:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.85.0
+      - uses: dtolnay/rust-toolchain@1.94.0
       - uses: Swatinem/rust-cache@v2
       - run: cargo build -p spatiotemporal
 
-  # wasm 适配器：自己的 MSRV（wasmtime 要 1.94），测试要真的 guest 产物。
+  # wasm 适配器：测试要真的 guest 产物。
   wasm:
     runs-on: ubuntu-latest
     steps:
@@ -50,7 +48,7 @@ jobs:
       - run: cargo clippy -p spatiotemporal-wasm --all-targets -- -D warnings
       - run: cargo test -p spatiotemporal-wasm
 
-  # 脚本适配器：rquickjs 要 1.87，guest 就是字符串，不用预编译产物。
+  # 脚本适配器：guest 就是字符串，不用预编译产物。
   script:
     runs-on: ubuntu-latest
     steps:

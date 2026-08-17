@@ -1,14 +1,13 @@
 [package]
 name = "spatiotemporal-script"
-version = "0.0.1"
+version = "0.4.0"
 description = "把一段 QuickJS 脚本接成时空可组合性演算里的一等 fiber"
 keywords = ["quickjs", "javascript", "plugin", "composability", "agent"]
 categories = ["api-bindings", "rust-patterns"]
 edition.workspace = true
 repository.workspace = true
 license.workspace = true
-# 刻意不继承 workspace 的 rust-version：内核声明 1.85，rquickjs 0.12 要 1.87。
-rust-version = "1.87"
+rust-version.workspace = true
 
 [lints]
 workspace = true

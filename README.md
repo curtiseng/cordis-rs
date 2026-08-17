@@ -35,12 +35,10 @@ impl Component for Worker {
 
 ```toml
 [dependencies]
-spatiotemporal = { git = "https://github.com/curtiseng/cordis-rs" }
+spatiotemporal = "0.4"
 ```
 
 完整的最小例子见 `src/lib.rs` 顶部的文档，`cargo test --doc` 会真的把它跑一遍。
-
-包名叫 `spatiotemporal` 而仓库还叫 `cordis-rs`，是因为 crates.io 上的 `cordis-rs` 已经属于[另一个项目](https://github.com/dshbox/cordis-rs)——那是 Cordis **框架 API 面**的移植（service、events、reflect、logger），这里是**演算本身**的实现，测试逐条对着定理写。两件不同的事，名字撞了而已。
 
 ## 仓库结构
 
@@ -52,7 +50,7 @@ crates/spatiotemporal-script/   # QuickJS 脚本基质，模型现写的代码�
 spatiotemporal-agent/           # 例子：一切都是插件（不发布）
 ```
 
-`default-members` 只含内核，所以 `cargo test` 不会去编 wasmtime 或 QuickJS——内核有 5 个依赖、MSRV 1.85，而 wasmtime 要 1.94、rquickjs 要 1.87。但 **lockfile 是整个 workspace 共享的**（`default-members` 只影响编译，不影响解析），所以卫星 crate 理论上能把某个共享依赖的版本拉高、把内核的实际 MSRV 悄悄推上去。CI 里有一个钉在 1.85 上只编内核的 job 专门守这件事。
+`default-members` 只含内核，所以 `cargo test` 不会去编 wasmtime 或 QuickJS——内核有 5 个依赖，而 wasmtime / rquickjs 各自再带一大坨。整个 workspace 的 MSRV 统一为 **1.94**（wasmtime 47 的要求）。
 
 ## 配置热重载
 
@@ -331,7 +329,7 @@ cargo run -p spatiotemporal-agent
 
 ## 还没有做的
 
-这是 0.3，范围到论文 5.1 节加 5.2.1 节。以下都是明确的缺口，不是疏漏：
+这是 0.4，范围到论文 5.1 节加 5.2.1 节。以下都是明确的缺口，不是疏漏：
 
 - **单线程。** `Rc` + `RefCell` + `LocalPool`。多线程版本要把所有 disposer 与 apply 的返回 future 加上 `Send + 'static`，组件作者会明显感到约束。
 - **`Context::effect` 在调用点跑到完成**，不作为并发任务。所以「飞行中的 effect 被 dispose 中止」这一支没实现；组件层（`apply`）的守卫与部分回滚是完整的。

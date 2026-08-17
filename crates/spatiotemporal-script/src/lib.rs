@@ -7,8 +7,8 @@
 //! 它的 `apply` 去跑 `load`，把 `unload` 用 `steps.step_sync` 登记成逆。内核不需要
 //! 知道 QuickJS 存在。
 //!
-//! 分开的实际理由与 `spatiotemporal-wasm` 相同：内核有 5 个依赖、零 IO、MSRV 1.85；
-//! rquickjs 要编一段 C、MSRV 1.87。想读演算的人不该被迫链接一个 JS 引擎。
+//! 分开的实际理由与 `spatiotemporal-wasm` 相同：内核有 5 个依赖、零 IO；
+//! rquickjs 要编一段 C。想读演算的人不该被迫链接一个 JS 引擎。
 //!
 //! # 与 wasm 适配器的差别
 //!
