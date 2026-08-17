@@ -425,6 +425,27 @@ impl Runtime {
         }
     }
 
+    /// 等到系统里不再有任何飞行中的转换。
+    ///
+    /// [`App::settle`] 的可 await 版本。异步代码里需要它是因为一次变更会级联：
+    /// 装上一个提供者会让它的依赖方**各自**发起转换，而那些 fiber 事先不可枚举。
+    /// 只等自己碰过的那几个 fiber 是不够的。
+    ///
+    /// 每轮扫描只取一个飞行中的转换来 await，因此不依赖执行器去驱动其它任务；
+    /// 循环能终止由论文定理 66（终止性）保证。
+    pub(crate) async fn quiesce(rt: Rc<Runtime>) {
+        loop {
+            let inflight = {
+                let fibers = rt.fibers.borrow();
+                fibers.iter().find_map(|(_, fiber)| fiber.inertia.clone())
+            };
+            match inflight {
+                Some(inertia) => inertia.await,
+                None => break,
+            }
+        }
+    }
+
     /// 等到某个 fiber 不再有飞行中的转换。
     ///
     /// 循环是必需的：一次转换可以在收尾时**链接**进下一次（惯性链接），

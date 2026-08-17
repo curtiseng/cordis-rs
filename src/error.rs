@@ -21,6 +21,18 @@ pub enum Error {
     Inactive(&'static str),
     /// 组件自身报告的失败。
     Component(String),
+    /// 配置里指名了注册表中没有的组件。
+    ///
+    /// Rust 没有运行时模块注册表（论文 6.4 节），所以「装不上」在这里是一个
+    /// 同步的、发生在任何 fiber 被改动**之前**的错误。
+    Unknown(String),
+    /// 配置本身不合法：解析失败，或不符合组件的期望形状。
+    Config(String),
+    /// 对账失败后，回滚也失败了。
+    ///
+    /// 系统此时处于部分应用状态。这条错误的存在本身就是承诺的边界：可撤销
+    /// effect 保证逆会被调用，不保证逆自己不会出错。
+    Rollback(Vec<String>),
 }
 
 impl Error {
@@ -41,6 +53,11 @@ impl fmt::Display for Error {
             Error::Undeclared(name) => write!(f, "访问了未声明的依赖：{name}"),
             Error::Inactive(name) => write!(f, "依赖当前未被提供：{name}"),
             Error::Component(message) => write!(f, "{message}"),
+            Error::Unknown(name) => write!(f, "注册表里没有这个组件：{name}"),
+            Error::Config(message) => write!(f, "配置不合法：{message}"),
+            Error::Rollback(messages) => {
+                write!(f, "对账失败后回滚也失败了：{}", messages.join("；"))
+            }
         }
     }
 }

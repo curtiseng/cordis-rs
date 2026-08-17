@@ -21,3 +21,4 @@ jobs:
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test
       - run: cargo run --example swap_provider
+      - run: cargo run --example watch_config

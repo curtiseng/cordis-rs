@@ -2,7 +2,7 @@
 
 时空可组合性演算的 Rust 实现。
 
-论文《[A Programming Paradigm for Spatiotemporal Composability](https://github.com/cordiverse/paper)》第 5.1 节给出了一个核心库，把可撤销 effect 与响应式 coeffect 实现成可用的编程抽象；原文的参考实现 [Cordis](https://github.com/cordiverse/cordis) 是 TypeScript 写的。这里是同一套语义的 Rust 版本，**只做核心库这一层**。
+论文《[A Programming Paradigm for Spatiotemporal Composability](https://github.com/cordiverse/paper)》第 5 章给出了一个核心库，把可撤销 effect 与响应式 coeffect 实现成可用的编程抽象；原文的参考实现 [Cordis](https://github.com/cordiverse/cordis) 是 TypeScript 写的。这里是同一套语义的 Rust 版本：**核心库（5.1 节）加声明式配置层（5.2.1 节）**。
 
 一句话概括它解决什么问题：**让组件可以在运行中被装上和拆掉，而拆得干净这件事由抽象保证，不依赖每个组件作者的勤谨程度。**
 
@@ -40,6 +40,55 @@ cordis-rs = { git = "https://github.com/curtiseng/cordis-rs" }
 
 crate 名是 `cordis`（包名跟仓库对齐）。完整的最小例子见 `src/lib.rs` 顶部的文档，`cargo test --doc` 会真的把它跑一遍。
 
+## 配置热重载
+
+`Loader` 把一棵配置树对账成一组活着的 fiber。配置变了就把差异增量地施加上去——**没有任何新机制**：每次变更最终都是 `use_component` 与 `dispose`，所以配置热重载是可撤销 effect 的一个应用，而不是它之外的另一套东西。
+
+一份基础配置加一层用户 patch，形状照 dsh 的 `cordis.yml` + `cordis.patch.yml`：
+
+```yaml
+# cordis.yml
+- id: sandbox
+  name: dsh-sandbox-local
+
+- id: tool-bash        # 它声明了 sandbox，但不知道是谁在提供
+  name: dsh-tool-bash
+
+- id: tool-web
+  name: dsh-tool-web
+  config:
+    fetch: false
+```
+
+```yaml
+# cordis.patch.yml —— 用户层，叠加在上面
+- id: tool-web
+  config:
+    fetch: true              # 按 id 的 patch 替换整个 config，没改的字段也要重述
+    searchTimeoutMs: 60000
+
+- id: sandbox
+  disabled: true             # 换实现 = 关掉旧行
+
+- insert:
+    - id: sandbox-remote     # 加上新行
+      name: dsh-sandbox-remote
+```
+
+保存之后，`tool-web` 那一行重挂，`sandbox` 换成远端，而 `tool-bash` **自己**去激活再重新激活——它没有写任何重连逻辑。`cargo run --example watch_config` 用 `notify` 把这套跑起来，包括「写坏配置不会杀死运行中的树」那一支。文件监听刻意留在库外面：它属于宿主的职责。
+
+这一层有五个值得单独说的决定：
+
+**先构造，再拆除。** 注册表里没有的名字、不合法的配置，都在任何 fiber 被动过**之前**同步失败。所以一次写坏的编辑不会先把系统拆一半——这是 dsh「先导入变化后的模块名，再 dispose 活动 fiber」的同一条。
+
+**补偿事务，不是不可见的原子替换。** 任意组件的 effect 无法快照，所以不承诺中间状态不可见。候选失败时拆掉候选、重建先前的行，并如实报告 `Error::Rollback` 而不是声称树被完好保留。重建出来的是**新的** fiber：可撤销性保证逆会被运行，不保证时间被倒流。
+
+**串行且合并。** 同一个 loader 上的并发 `apply` 不会交错，第二个调用只更新「期望状态」然后立刻返回，由正在跑的那一轮拾取。这不是吞吐取舍而是正确性要求：对账过程中会 await，两轮交错的对账会在同一行上交叉执行 create 与回滚。dsh 在这里踩过一个三方死锁（回滚等 HMR 拆卸、HMR 等自己的 refresh、refresh 排在正在回滚的 apply 后面），`tests/loader.rs` 里那条测试就是钉这个的。
+
+**patch 里的 `name` 是断言而不是赋值。** 对不上就整条跳过并留一条警告。理由是一层 patch 可能是为另一套组合写的，而 id 撞车时静默地重配了另一个插件，比这条 patch 不生效危险得多。这条也照 dsh。
+
+**注册表必须显式建立。** Rust 没有运行时模块注册表（论文 6.4 节把这条列为原生语言的固有差异），所以 `name → 构造器` 这张表要手写。交换条件是：加一个新组件要动宿主一行代码并重新编译，但**已注册组件的开关、重配、插入、移除全都不需要重启**——而那正是配置热重载所要的全部。
+
 ## 与论文的对应
 
 | 论文 | 这里 |
@@ -57,6 +106,7 @@ crate 名是 `cordis`（包名跟仓库对齐）。完整的最小例子见 `src
 | `fiber.uid`、`fiber.committed`、`fiber.inertia` | 代际索引、已提交视图、`Shared` future |
 | **O-Insert** / **O-Retire** / **O-Remove** | `use_component` / `FiberHandle::dispose` / 卸载完成后移出竞技场 |
 | **L-Leave** 与 **L-Unload** 上的守卫 | `refresh` 先标记 `Unloading`，`unload` 先排空依赖方 |
+| 5.2.1 节的组件加载器 | `Loader`、`Registry`、`compose` |
 
 ## Rust 里的七个设计决定
 
@@ -80,7 +130,7 @@ crate 名是 `cordis`（包名跟仓库对齐）。完整的最小例子见 `src
 
 ## 测试对着定理写
 
-`cargo test` 跑 19 个测试，每个都指向论文的一条性质：
+`cargo test` 跑 45 个测试。核心库那部分每个都指向论文的一条性质：
 
 | 测试 | 论文 |
 |---|---|
@@ -100,14 +150,28 @@ crate 名是 `cordis`（包名跟仓库对齐）。完整的最小例子见 `src
 
 其中定理 63 那条最值得看：一个「因为依赖走了才被拆解」的组件，在自己的拆解过程中仍然能读到那个正在离去的依赖。论文说这条性质由三行代码的**位置**保证，测试就是在钉这三行的位置。
 
+配置层那部分（`tests/loader.rs`、`tests/config.rs`）钉的是对账语义：
+
+| 测试 | 钉的是 |
+|---|---|
+| `unchanged_rows_are_left_alone` | 增量对账的全部意义：改一行不该让整棵树重启 |
+| `a_config_change_reloads_only_that_row` | 只有那一行动，而且先拆后装 |
+| `an_unknown_name_fails_before_touching_anything` | 先构造再拆除 |
+| `a_failing_row_rolls_back_to_the_previous_tree` | 补偿事务 |
+| `a_row_waiting_for_its_dependency_is_not_a_failure` | 依赖不可用只是非活动，是有效的 pending 配置项 |
+| `swapping_a_provider_row_reloads_its_consumers` | **改一行配置换掉实现，消费者自己跟上** |
+| `concurrent_applies_are_serialized_and_coalesced` | 串行化是正确性要求 |
+| `a_name_in_a_patch_is_an_assertion_not_an_assignment` | patch 的 `name` 是断言 |
+
 ## 还没有做的
 
-这是 0.1，范围只到论文 5.1 节。以下都是明确的缺口，不是疏漏：
+这是 0.2，范围到论文 5.1 节加 5.2.1 节。以下都是明确的缺口，不是疏漏：
 
 - **单线程。** `Rc` + `RefCell` + `LocalPool`。多线程版本要把所有 disposer 与 apply 的返回 future 加上 `Send + 'static`，组件作者会明显感到约束。
 - **`Context::effect` 在调用点跑到完成**，不作为并发任务。所以「飞行中的 effect 被 dispose 中止」这一支没实现；组件层（`apply`）的守卫与部分回滚是完整的。
 - **没有拦截**（定义 31 的 `@@intercept`）。访问控制元数据与细粒度策略还没有对应物。
-- **没有组件加载器**（5.2 节）：声明式配置层与热模块替换都不在。HMR 在 Rust 里没有好答案，见论文 6.4 节：原生代码没有模块注册表，`dlopen`/`dlclose` 会撞上 `TypeId` 跨编译单元不一致、卸载时悬垂 vtable 等问题；wasm 组件模型更干净但要付序列化边界的代价。
+- **配置树是平的。** 没有 group／嵌套子树，因此 `insert` 只能追加到顶层。dsh 的组合包用嵌套行来把一组能力归到一个宿主行之下，那需要「一个组件持有自己的子对账器」，还没做。
+- **没有热模块替换**（5.2.2 节）。这在 Rust 里没有好答案，见论文 6.4 节：原生代码没有模块注册表，`dlopen`/`dlclose` 会撞上 `TypeId` 跨编译单元不一致、卸载时悬垂 vtable 等问题；wasm 组件模型更干净但要付序列化边界的代价。**注意这跟配置热重载是两件事**——后者已经在了，而且它才是长驻进程真正需要的那件（dsh 在两个发行形态里都把宿主端模块 HMR 关掉了，却给配置层补挂一个只看配置的 watcher）。
 - **没有服务代理**（6.2 节），因此没有负载均衡、滚动更新与跨进程调用。
 - **没有过程宏**，`inject` 仍是运行时声明。
 

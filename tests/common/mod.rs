@@ -85,6 +85,24 @@ where
     }
 }
 
+/// 把控制权交回执行器一次。
+///
+/// 用来在测试里造出一个确定的 await 点：没有它，一次加载会在调用点被同步驱动
+/// 到底，于是「对账进行中又来了一次 apply」这种交错根本无法被观察到。
+pub async fn yield_once() {
+    let mut yielded = false;
+    futures::future::poll_fn(move |cx| {
+        if yielded {
+            std::task::Poll::Ready(())
+        } else {
+            yielded = true;
+            cx.waker().wake_by_ref();
+            std::task::Poll::Pending
+        }
+    })
+    .await
+}
+
 /// 测试里当作 coeffect 用的最小服务。
 pub trait Service {
     fn tag(&self) -> &'static str;

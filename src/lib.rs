@@ -84,6 +84,42 @@
 //! assert_eq!(consumer.state(), State::Inactive);
 //! ```
 //!
+//! # 声明式配置层
+//!
+//! [`Loader`] 是论文 5.2.1 节那一层：一棵配置树对账成一组活着的 fiber，配置变了
+//! 就把差异增量地施加上去。它不含任何新机制——每次变更都归约成
+//! [`Context::use_component`] 与 [`FiberHandle::dispose`]，所以**配置热重载是
+//! 可撤销 effect 的一个应用，而不是它之外的另一套东西**。
+//!
+//! ```
+//! use cordis::{App, Entry, FnComponent, Loader, Registry, State};
+//! use std::rc::Rc;
+//!
+//! let mut registry = Registry::new();
+//! registry.add("noop", |_config| {
+//!     Ok(Rc::new(FnComponent::new("noop", |_ctx, _steps| {
+//!         Box::pin(async { Ok(()) })
+//!     })) as Rc<dyn cordis::Component>)
+//! });
+//!
+//! let mut app = App::new();
+//! let loader = Loader::new(app.root(), registry);
+//!
+//! // 一份配置 → 一组 fiber。
+//! app.block_on(loader.apply(vec![Entry::new("a", "noop"), Entry::new("b", "noop")])).unwrap();
+//! assert_eq!(loader.state("a"), Some(State::Active));
+//!
+//! // 关掉一行：只有那一行被拆，别的不动。
+//! let applied = app
+//!     .block_on(loader.apply(vec![Entry::new("a", "noop").disabled(), Entry::new("b", "noop")]))
+//!     .unwrap();
+//! assert_eq!(applied.removed, vec!["a"]);
+//! assert_eq!(loader.ids(), vec!["b"]);
+//! ```
+//!
+//! 文件监听刻意留在库外面——它属于宿主的职责。`cargo run --example watch_config`
+//! 有一个用 `notify` 接上的完整演示，包括「写坏配置不会杀死运行中的树」。
+//!
 //! # 与论文的对应
 //!
 //! | 论文 | 这里 |
@@ -98,6 +134,7 @@
 //! | `fiber.state`（定义 44 的 $\theta$） | [`State`] |
 //! | `fiber.inertia` | `Shared` future |
 //! | **O-Insert** / **O-Retire** | [`Context::use_component`] / [`FiberHandle::dispose`] |
+//! | 5.2.1 节的组件加载器 | [`Loader`]、[`Registry`]、[`compose`] |
 //!
 //! 详细的取舍与尚未实现的部分见仓库 README。
 //!
@@ -106,15 +143,25 @@
 mod component;
 mod context;
 mod effect;
+mod entry;
 mod error;
 mod fiber;
 mod key;
+mod loader;
+mod registry;
 mod runtime;
 
 pub use component::{Component, FnComponent, shared};
 pub use context::{Context, FiberHandle};
 pub use effect::{EffectHandle, Inverse, Steps};
+pub use entry::{Composed, Entry, Patch, compose, parse_entries, parse_patches};
 pub use error::{Error, Result};
 pub use fiber::State;
 pub use key::{Key, KeyId, RealmId};
+pub use loader::{Applied, Loader};
+pub use registry::{Factory, Registry};
 pub use runtime::App;
+
+/// 重新导出：配置值的类型出现在 [`Entry::config`] 与 [`Factory`] 的签名里，
+/// 调用方不该为了写一行配置去猜该配哪个版本的 serde_json。
+pub use serde_json::Value;
