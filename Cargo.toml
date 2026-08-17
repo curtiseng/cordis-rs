@@ -19,7 +19,7 @@ default-members = ["."]
 [workspace.package]
 edition = "2024"
 rust-version = "1.94"
-repository = "https://github.com/curtiseng/spatiotemporal"
+repository = "https://github.com/zifeng-yang/spatiotemporal"
 license = "MIT"
 
 [workspace.dependencies]
