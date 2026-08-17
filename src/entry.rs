@@ -148,15 +148,15 @@ pub fn compose(base: &[Entry], layers: &[Vec<Patch>]) -> Result<Composed> {
                     match entries.iter_mut().find(|entry| &entry.id == id) {
                         Some(entry) => {
                             // `name` 是断言：对不上就整条跳过，而不是改掉它。
-                            if let Some(expected) = &patch.name {
-                                if expected != &entry.name {
-                                    warnings.push(format!(
-                                        "第 {} 层的 patch 断言 {id} 是 {expected}，实际是 {}，已跳过",
-                                        index + 1,
-                                        entry.name
-                                    ));
-                                    continue;
-                                }
+                            if let Some(expected) = &patch.name
+                                && expected != &entry.name
+                            {
+                                warnings.push(format!(
+                                    "第 {} 层的 patch 断言 {id} 是 {expected}，实际是 {}，已跳过",
+                                    index + 1,
+                                    entry.name
+                                ));
+                                continue;
                             }
                             if let Some(config) = &patch.config {
                                 entry.config = config.clone();
