@@ -2,7 +2,7 @@
 
 读一篇 Markdown，用 DeepSeek 当讲解员，在浏览器里对话。宿主几乎只做两件事：建一张插件注册表，再用 `Loader` 把 `cordis.yml` 对账成一棵 fiber 树。文档、工具、LLM、界面都是插件。
 
-![在浏览器里问 sample.md：左侧是插件树，中间是会话，右侧是原文](assets/ui.jpg)
+![创造模式：左侧插件树含热装的 word-count，中间会话调工具统计 sample.md，右侧原文](assets/ui.jpg)
 
 ## 启动
 
