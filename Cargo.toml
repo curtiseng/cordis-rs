@@ -1,0 +1,22 @@
+[package]
+name = "cordis-rs"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "时空可组合性演算的 Rust 实现：可撤销 effect、响应式 coeffect、fiber 惯性生命周期"
+repository = "https://github.com/curtiseng/cordis-rs"
+license = "MIT"
+keywords = ["plugin", "effects", "coeffects", "composability", "lifecycle"]
+categories = ["rust-patterns", "asynchronous"]
+
+[lib]
+# 包名跟仓库对齐，但对外的 crate 名是 cordis。
+name = "cordis"
+
+[dependencies]
+futures = { version = "0.3.34", default-features = false, features = ["std", "executor"] }
+slotmap = "1.1.1"
+
+[lints.rust]
+missing_debug_implementations = "allow"
+unsafe_code = "forbid"
