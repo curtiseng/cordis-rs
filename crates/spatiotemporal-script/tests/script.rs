@@ -6,7 +6,7 @@
 use std::rc::Rc;
 
 use spatiotemporal::{App, Context, Error, FnComponent, Key, State};
-use spatiotemporal_script::{Capabilities, ScriptPlugin};
+use spatiotemporal_script::{Capabilities, LlmHost, ScriptPlugin, ToolInvoke};
 
 trait Database {
     fn dsn(&self) -> String;
@@ -253,4 +253,70 @@ fn a_script_without_load_fails_as_a_component() {
     assert_eq!(handle.state(), State::Failed);
     let error = handle.error().expect("该有一条组件失败");
     assert!(error.contains("没有导出 load"), "实际是：{error}");
+}
+
+trait Completer {
+    fn model(&self) -> String;
+    fn complete(&self, prompt: &str) -> String;
+}
+
+enum Llm {}
+impl Key for Llm {
+    type Api = dyn Completer;
+    const NAME: &'static str = "llm";
+}
+
+struct GuestLlm {
+    model: String,
+    invoke: ToolInvoke,
+}
+
+impl Completer for GuestLlm {
+    fn model(&self) -> String {
+        self.model.clone()
+    }
+    fn complete(&self, prompt: &str) -> String {
+        (self.invoke)(prompt).expect("echo 不该失败")
+    }
+}
+
+struct Installer;
+impl LlmHost for Installer {
+    fn install(
+        &self,
+        ctx: &Context,
+        model: String,
+        invoke: ToolInvoke,
+    ) -> spatiotemporal::Result<()> {
+        ctx.set::<Llm>(Rc::new(GuestLlm { model, invoke }) as Rc<dyn Completer>);
+        Ok(())
+    }
+}
+
+/// 脚本可以把自己登记成 LLM 提供者。卸载后绑定跟着消失。
+#[test]
+fn a_script_can_provide_an_llm() {
+    const ECHO: &str = r#"
+export function load() {
+    host.registerLlm("echo", (prompt) => "echo:" + prompt);
+}
+export function unload() {}
+"#;
+
+    let mut app = App::new();
+    let plugin = Rc::new(
+        ScriptPlugin::from_source("echo", ECHO, capabilities(), Vec::new())
+            .expect("语法该是合法的")
+            .with_llm(Rc::new(Installer) as Rc<dyn LlmHost>),
+    );
+    let handle = app.root().use_component(plugin);
+    app.settle();
+    assert_eq!(handle.state(), State::Active);
+
+    let llm = app.root().lookup::<Llm>().expect("脚本该把 llm 装上");
+    assert_eq!(llm.model(), "echo");
+    assert_eq!(llm.complete("hi"), "echo:hi");
+
+    app.block_on(handle.dispose());
+    assert!(app.root().lookup::<Llm>().is_none());
 }

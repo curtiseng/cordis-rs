@@ -48,3 +48,17 @@ pub trait ToolHost: 'static {
 
 /// 调一个脚本工具：参数和返回值都是字符串（通常是 JSON）。
 pub type ToolInvoke = Rc<dyn Fn(&str) -> spatiotemporal::Result<String>>;
+
+/// guest 登记自己为 LLM 时，宿主接到的那一面对。
+///
+/// 适配器在 `load` 成功之后调用 [`LlmHost::install`]，把脚本里的补全函数包成
+/// 宿主的 coeffect。安装发生在这个 fiber 的 `apply` 里，所以 `ctx.set` 的逆
+/// 跟着这个 fiber 走。
+pub trait LlmHost: 'static {
+    fn install(
+        &self,
+        ctx: &spatiotemporal::Context,
+        model: String,
+        invoke: ToolInvoke,
+    ) -> spatiotemporal::Result<()>;
+}

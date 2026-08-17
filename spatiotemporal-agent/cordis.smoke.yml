@@ -1,0 +1,17 @@
+# smoke / CI：DeepSeek 换成脚本 echo，Web 换成 probe。
+# patch 里的 name 是断言不是赋值，所以换实现只能 disable + insert。
+
+- id: llm
+  disabled: true
+
+- id: ui
+  disabled: true
+
+- insert:
+    - id: echo
+      name: script
+      config:
+        file: plugins/echo.js
+        role: 提供 llm（echo，不调网络）
+    - id: probe
+      name: probe

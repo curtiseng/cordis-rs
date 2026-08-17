@@ -1,7 +1,7 @@
 //! wasm 插件：从授予的 markdown 文本里抽出标题大纲。
 
 wit_bindgen::generate!({
-    path: "../../../spatiotemporal-wasm/wit",
+    path: "../../../crates/spatiotemporal-wasm/wit",
     world: "plugin",
 });
 

@@ -54,3 +54,17 @@ pub trait ToolHost: 'static {
 
 /// 调一个 wasm 工具：参数和返回值都是字符串（通常是 JSON）。
 pub type ToolInvoke = Rc<dyn Fn(&str) -> spatiotemporal::Result<String>>;
+
+/// guest 登记自己为 LLM 时，宿主接到的那一面对。
+///
+/// 适配器在 `load` 成功之后调用 [`LlmHost::install`]，把 guest 的 `invoke("__llm")`
+/// 包成宿主的 coeffect。安装发生在这个 fiber 的 `apply` 里，所以 `ctx.set` 的
+/// 逆跟着这个 fiber 走——guest 破坏不了自己的清理。
+pub trait LlmHost: 'static {
+    fn install(
+        &self,
+        ctx: &spatiotemporal::Context,
+        model: String,
+        invoke: ToolInvoke,
+    ) -> spatiotemporal::Result<()>;
+}

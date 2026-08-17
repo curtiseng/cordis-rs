@@ -4,3 +4,5 @@
 # 提交预编译的二进制没法评审，也没法复现。
 /crates/*/target
 /crates/*/guests/*/target
+/spatiotemporal-agent/target
+/spatiotemporal-agent/guests/*/target

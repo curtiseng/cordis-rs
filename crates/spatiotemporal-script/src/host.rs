@@ -83,12 +83,13 @@ impl Capabilities {
     }
 }
 
-/// 把 `host.log` / `host.capability` / `host.registerTool` 挂到全局。
+/// 把 `host.log` / `host.capability` / `host.registerTool` / `host.registerLlm` 挂到全局。
 pub(crate) fn install_host<'js>(
     ctx: Ctx<'js>,
     view: HashMap<String, String>,
     logs: Arc<Mutex<Vec<String>>>,
     pending_tools: Arc<Mutex<Vec<(String, String)>>>,
+    pending_llm: Arc<Mutex<Option<String>>>,
 ) -> rquickjs::Result<()> {
     let tools_table = Object::new(ctx.clone())?;
     ctx.globals().set("__tools", tools_table)?;
@@ -128,6 +129,14 @@ pub(crate) fn install_host<'js>(
         })?,
     )?;
 
+    host.set(
+        "registerLlm",
+        Function::new(ctx.clone(), {
+            let pending_llm = pending_llm.clone();
+            move |ctx, model, func| stash_llm(ctx, &pending_llm, model, func)
+        })?,
+    )?;
+
     ctx.globals().set("host", host)
 }
 
@@ -142,6 +151,19 @@ fn stash_tool<'js>(
     table.set(name.as_str(), func)?;
     if let Ok(mut pending) = pending.lock() {
         pending.push((name, description));
+    }
+    Ok(())
+}
+
+fn stash_llm<'js>(
+    ctx: Ctx<'js>,
+    pending: &Arc<Mutex<Option<String>>>,
+    model: String,
+    func: Function<'js>,
+) -> rquickjs::Result<()> {
+    ctx.globals().set("__llm", func)?;
+    if let Ok(mut pending) = pending.lock() {
+        *pending = Some(model);
     }
     Ok(())
 }

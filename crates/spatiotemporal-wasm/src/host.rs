@@ -103,6 +103,8 @@ pub struct HostState {
     logs: Arc<Mutex<Vec<String>>>,
     /// `load` 期间 guest 报上来的工具。真正接到 [`ToolHost`] 是 `apply` 的事。
     pending_tools: Arc<Mutex<Vec<(String, String)>>>,
+    /// `load` 期间 guest 报上来的 LLM 模型名。真正接到 [`LlmHost`] 是 `apply` 的事。
+    pending_llm: Arc<Mutex<Option<String>>>,
 }
 
 impl HostState {
@@ -110,6 +112,7 @@ impl HostState {
         view: HashMap<String, String>,
         logs: Arc<Mutex<Vec<String>>>,
         pending_tools: Arc<Mutex<Vec<(String, String)>>>,
+        pending_llm: Arc<Mutex<Option<String>>>,
     ) -> Self {
         HostState {
             wasi: WasiCtxBuilder::new().build(),
@@ -117,6 +120,7 @@ impl HostState {
             view,
             logs,
             pending_tools,
+            pending_llm,
         }
     }
 }
@@ -149,6 +153,12 @@ impl Host for HostState {
     fn register_tool(&mut self, name: String, description: String) {
         if let Ok(mut pending) = self.pending_tools.lock() {
             pending.push((name, description));
+        }
+    }
+
+    fn register_llm(&mut self, model: String) {
+        if let Ok(mut pending) = self.pending_llm.lock() {
+            *pending = Some(model);
         }
     }
 }

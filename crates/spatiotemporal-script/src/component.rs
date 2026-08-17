@@ -7,7 +7,7 @@ use rquickjs::{Context as JsContext, Function, Module, Runtime};
 use spatiotemporal::{Component, Context, Error, KeyId, Result, Steps};
 
 use crate::host::{Capabilities, install_host};
-use crate::{ToolHost, ToolInvoke};
+use crate::{LlmHost, ToolHost, ToolInvoke};
 
 /// 默认给 guest 的中断次数上限。
 ///
@@ -29,6 +29,7 @@ pub struct ScriptPlugin {
     fuel: u64,
     logs: Arc<Mutex<Vec<String>>>,
     tools: Option<Rc<dyn ToolHost>>,
+    llm: Option<Rc<dyn LlmHost>>,
 }
 
 impl ScriptPlugin {
@@ -59,12 +60,19 @@ impl ScriptPlugin {
             fuel: DEFAULT_FUEL,
             logs: Arc::new(Mutex::new(Vec::new())),
             tools: None,
+            llm: None,
         })
     }
 
     /// 把 guest 在 `load` 里登记的工具接到宿主的工具表上。
     pub fn with_tools(mut self, tools: Rc<dyn ToolHost>) -> Self {
         self.tools = Some(tools);
+        self
+    }
+
+    /// 把 guest 在 `load` 里登记的 LLM 接到宿主的 `llm` 键上。
+    pub fn with_llm(mut self, llm: Rc<dyn LlmHost>) -> Self {
+        self.llm = Some(llm);
         self
     }
 
@@ -122,10 +130,17 @@ impl Component for ScriptPlugin {
             let source = self.source.clone();
             let name = self.name.clone();
             let pending_tools = Arc::new(Mutex::new(Vec::new()));
+            let pending_llm = Arc::new(Mutex::new(None));
 
             js.with(|js_ctx| -> Result<()> {
-                install_host(js_ctx.clone(), view, logs.clone(), pending_tools.clone())
-                    .map_err(js_error("接不上宿主接口"))?;
+                install_host(
+                    js_ctx.clone(),
+                    view,
+                    logs.clone(),
+                    pending_tools.clone(),
+                    pending_llm.clone(),
+                )
+                .map_err(js_error("接不上宿主接口"))?;
 
                 let module = Module::declare(js_ctx.clone(), format!("{name}.js"), source)
                     .map_err(js_error("脚本声明失败"))?;
@@ -185,6 +200,25 @@ impl Component for ScriptPlugin {
                     let host = host.clone();
                     steps.step_sync(move || host.unregister(&tool_name))?;
                 }
+            }
+
+            let model = pending_llm.lock().ok().and_then(|slot| slot.clone());
+            if let Some(model) = model {
+                let Some(host) = &self.llm else {
+                    return Err(Error::Component("guest 登记了 LLM，但宿主没接".into()));
+                };
+                let js = js.clone();
+                let invoke: ToolInvoke = Rc::new(move |args: &str| {
+                    js.with(|js_ctx| -> Result<String> {
+                        let func: Function = js_ctx
+                            .globals()
+                            .get("__llm")
+                            .map_err(js_error("LLM 函数不见了"))?;
+                        func.call((args.to_owned(),))
+                            .map_err(|error| Error::Component(format!("LLM 补全失败：{error}")))
+                    })
+                });
+                host.install(&ctx, model, invoke)?;
             }
 
             let name = self.name.clone();

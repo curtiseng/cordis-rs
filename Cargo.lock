@@ -1040,20 +1040,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dae608c151f68243f2b000364e1f7b186d9c29845f7d2d85bd31b9ad77ad552b"
 
 [[package]]
-name = "markdown-agent"
-version = "0.0.1"
-dependencies = [
- "futures",
- "serde",
- "serde_json",
- "spatiotemporal",
- "spatiotemporal-script",
- "spatiotemporal-wasm",
- "tiny_http",
- "ureq",
-]
-
-[[package]]
 name = "maybe-owned"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1585,6 +1571,20 @@ dependencies = [
  "serde_json",
  "serde_yaml_ng",
  "slotmap",
+]
+
+[[package]]
+name = "spatiotemporal-agent"
+version = "0.0.1"
+dependencies = [
+ "futures",
+ "serde",
+ "serde_json",
+ "spatiotemporal",
+ "spatiotemporal-script",
+ "spatiotemporal-wasm",
+ "tiny_http",
+ "ureq",
 ]
 
 [[package]]

@@ -49,7 +49,7 @@ Cargo.toml                      # 内核，同时是 workspace 根
 src/ tests/ examples/
 crates/spatiotemporal-wasm/     # wasm 基质适配器，独立版本、独立发布
 crates/spatiotemporal-script/   # QuickJS 脚本基质，模型现写的代码走这里
-crates/markdown-agent/          # 三种基质 + DeepSeek + Web UI 的例子（不发布）
+spatiotemporal-agent/           # 例子：一切都是插件（不发布）
 ```
 
 `default-members` 只含内核，所以 `cargo test` 不会去编 wasmtime 或 QuickJS——内核有 5 个依赖、MSRV 1.85，而 wasmtime 要 1.94、rquickjs 要 1.87。但 **lockfile 是整个 workspace 共享的**（`default-members` 只影响编译，不影响解析），所以卫星 crate 理论上能把某个共享依赖的版本拉高、把内核的实际 MSRV 悄悄推上去。CI 里有一个钉在 1.85 上只编内核的 job 专门守这件事。
@@ -199,27 +199,32 @@ let plugin = ScriptPlugin::from_source(
 cargo test -p spatiotemporal-script
 ```
 
-guest 还可以 `host.registerTool(name, description, fn)`（wasm 侧是 WIT 的 `register-tool` + 导出 `invoke`）。登记本身的逆由宿主持有：脚本把自己的 `unload` 删掉，工具照样会从桌上消失。
+guest 还可以 `host.registerTool(name, description, fn)` 和 `host.registerLlm(model, fn)`（wasm 侧是 WIT 的 `register-tool` / `register-llm` + 导出 `invoke`）。登记本身的逆由宿主持有：脚本把自己的 `unload` 删掉，工具和 LLM 绑定照样会从桌上消失。
 
-## Markdown Agent
+## Spatiotemporal Agent
 
-`crates/markdown-agent` 把三种基质接到同一条对话链上。它读一篇 Markdown，用 DeepSeek 当讲解员，浏览器里聊天。
+`spatiotemporal-agent/` 在仓库根上。宿主几乎什么都不做：建一张 `Registry`，用 `Loader` 把 `cordis.yml` 对账成一棵 fiber 树。文档、工具、LLM、界面都是插件，基质可以是 native / wasm / script。换实现跟 dsh 一样——关掉旧行再 `insert` 新行，见 `cordis.smoke.yml`。
 
-| 插件 | 基质 | 做什么 |
+| 配置里的 `name` | 基质 | 提供 |
 |---|---|---|
-| `doc` / `deepseek` / `read_doc` | native | 提供文档与 LLM，登记「读全文」 |
-| `outline` | wasm | 抽标题大纲，能力面由 WIT 钉死 |
-| `cite` | script | 按关键词引用原文，形状就是模型现写的一段 JS |
+| `doc` / `read-doc` | native | `markdown` 能力，登记「读全文」 |
+| `wasm`（outline） | wasm | 抽标题大纲 |
+| `script`（cite） | script | 按关键词引用原文 |
+| `deepseek` | native | `llm`（DeepSeek） |
+| `script`（echo） | script | `llm`（不调网络，smoke 用） |
+| `web` | native | `surface`（浏览器） |
+| `probe` | native | `surface`（打印工具并退出） |
 
 ```bash
-cd crates/markdown-agent
+cd spatiotemporal-agent
 ./scripts/build-guests.sh
 export DEEPSEEK_API_KEY=sk-...
-cargo run -p markdown-agent -- crates/markdown-agent/assets/sample.md
+cargo run -p spatiotemporal-agent
 # 打开 http://127.0.0.1:8787
 ```
 
-`--smoke` 不调 LLM、不听端口，只装插件并真的跑一遍 `outline` 和 `cite`。CI 用这个。
+`--smoke` 叠一层 patch：DeepSeek 换成 echo、Web 换成 probe。不调真实 LLM、不听端口。CI 用这个。
+
 
 ## 与论文的对应
 
@@ -333,7 +338,7 @@ cargo run -p markdown-agent -- crates/markdown-agent/assets/sample.md
 - **没有热模块替换**（5.2.2 节）。这在 Rust 里没有好答案，见论文 6.4 节：原生代码没有模块注册表，`dlopen`/`dlclose` 会撞上 `TypeId` 跨编译单元不一致、卸载时悬垂 vtable 等问题；wasm 组件模型更干净但要付序列化边界的代价。**注意这跟配置热重载是两件事**——后者已经在了，而且它才是长驻进程真正需要的那件（dsh 在两个发行形态里都把宿主端模块 HMR 关掉了，却给配置层补挂一个只看配置的 watcher）。
 - **没有服务代理**（6.2 节），因此没有负载均衡、滚动更新与跨进程调用。
 - **没有过程宏**，`inject` 仍是运行时声明。
-- **wasm / 脚本适配器只到叶子工具。** guest 可以登记一个可调用的工具（`register-tool` / `registerTool`），还不能提供 coeffect 给别人消费，也不能收事件。三条不会变的限制：guest 不能引入**新的** coeffect 种类，大 payload 过边界要付序列化代价，逆必须可抢占。
+- **wasm / 脚本适配器只到叶子服务。** guest 可以登记工具（`register-tool` / `registerTool`）或把自己登记成 LLM（`register-llm` / `registerLlm`），还不能引入**新的** coeffect 种类给原生插件消费，也不能收事件。三条不会变的限制：大 payload 过边界要付序列化代价，逆必须可抢占，以及 `Rc<dyn Trait>` 的 trait 必须在宿主编译期存在。
 - **子进程基质还没做。** MCP 那类远程插件需要一个 crate，而且需要宿主接一个带 IO 的执行器进来。
 
 ## 许可

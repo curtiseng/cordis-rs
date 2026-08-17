@@ -1,22 +1,91 @@
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::rc::Rc;
 
+use futures::future::LocalBoxFuture;
 use serde_json::{Value, json};
-use spatiotemporal::App;
+use spatiotemporal::{Component, Context, KeyId, Result, Steps};
 use tiny_http::{Header, Method, Response, Server, StatusCode};
 
 use crate::chat;
-use crate::plugins::{Toolbox, lookup_doc, lookup_llm};
+use crate::host::{Document, Llm, Roster, Surface, Toolbox};
+use crate::keys::{Doc, LlmKey, SurfaceKey};
 
-const INDEX: &str = include_str!("../assets/index.html");
+const INDEX: &str = include_str!("../../assets/index.html");
 
-pub fn serve(port: u16, doc_path: PathBuf, tools: Toolbox, app: App) {
-    let llm = lookup_llm(&app.root()).expect("deepseek 没装上");
-    let doc = lookup_doc(&app.root()).expect("文档没装上");
+/// 本地插件：浏览器界面。`apply` 只提供 `surface`，听端口发生在 `run`。
+pub struct Web {
+    pub port: u16,
+    pub tools: Toolbox,
+    pub roster: Roster,
+}
+
+struct WebSurface {
+    port: u16,
+    tools: Toolbox,
+    roster: Roster,
+    llm: Rc<dyn Llm>,
+    doc: Rc<dyn Document>,
+}
+
+impl Surface for WebSurface {
+    fn kind(&self) -> &'static str {
+        "web"
+    }
+
+    fn run(&self) {
+        let port = self.port;
+        println!("文档：{}", self.doc.path());
+        println!("打开 http://127.0.0.1:{port}");
+        serve(
+            port,
+            &self.tools,
+            &self.roster,
+            &*self.llm,
+            &*self.doc,
+            self.kind(),
+        );
+    }
+}
+
+impl Component for Web {
+    fn name(&self) -> &str {
+        "web"
+    }
+
+    fn inject(&self) -> Vec<KeyId> {
+        vec![KeyId::of::<Doc>(), KeyId::of::<LlmKey>()]
+    }
+
+    fn apply(&self, ctx: Context, _steps: Steps) -> LocalBoxFuture<'_, Result<()>> {
+        let port = self.port;
+        let tools = self.tools.clone();
+        let roster = self.roster.clone();
+        Box::pin(async move {
+            let doc = ctx.resolve::<Doc>()?;
+            let llm = ctx.resolve::<LlmKey>()?;
+            let surface: Rc<dyn Surface> = Rc::new(WebSurface {
+                port,
+                tools,
+                roster,
+                llm,
+                doc,
+            });
+            ctx.set::<SurfaceKey>(surface);
+            Ok(())
+        })
+    }
+}
+
+fn serve(
+    port: u16,
+    tools: &Toolbox,
+    roster: &Roster,
+    llm: &dyn Llm,
+    doc: &dyn Document,
+    kind: &str,
+) {
     let server = Server::http(("127.0.0.1", port)).unwrap_or_else(|error| {
         panic!("听不了 {port}：{error}");
     });
-    let turns = AtomicU64::new(0);
 
     for mut request in server.incoming_requests() {
         let url = request.url().split('?').next().unwrap_or("/").to_owned();
@@ -28,18 +97,17 @@ pub fn serve(port: u16, doc_path: PathBuf, tools: Toolbox, app: App) {
                 "doc": doc.path(),
                 "model": llm.model(),
                 "has_key": std::env::var("DEEPSEEK_API_KEY").is_ok(),
+                "surface": kind,
                 "tools": tools.list().into_iter().map(|t| json!({
                     "name": t.name,
                     "description": t.description,
                     "substrate": t.substrate,
                 })).collect::<Vec<_>>(),
-                "plugins": [
-                    {"name": "doc", "substrate": "native", "role": "提供 markdown 能力"},
-                    {"name": "deepseek", "substrate": "native", "role": "调用 DeepSeek LLM"},
-                    {"name": "read_doc", "substrate": "native", "role": "登记读全文工具"},
-                    {"name": "outline", "substrate": "wasm", "role": "抽标题大纲"},
-                    {"name": "cite", "substrate": "script", "role": "按关键词引用原文"},
-                ],
+                "plugins": roster.list().into_iter().map(|p| json!({
+                    "name": p.name,
+                    "substrate": p.substrate,
+                    "role": p.role,
+                })).collect::<Vec<_>>(),
             })),
             (Method::Get, "/api/doc") => json_ok(json!({
                 "path": doc.path(),
@@ -54,14 +122,7 @@ pub fn serve(port: u16, doc_path: PathBuf, tools: Toolbox, app: App) {
                 if user.is_empty() {
                     json_err(400, "空消息")
                 } else {
-                    turns.fetch_add(1, Ordering::Relaxed);
-                    let turn = chat::run(
-                        &*llm,
-                        &tools,
-                        &doc_path.display().to_string(),
-                        &user,
-                        &history,
-                    );
+                    let turn = chat::run(llm, tools, &doc.path(), &user, &history);
                     json_ok(serde_json::to_value(turn).unwrap_or(json!({})))
                 }
             }

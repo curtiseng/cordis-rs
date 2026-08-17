@@ -10,7 +10,7 @@ use wasmtime::{Config, Engine, Store};
 
 use crate::bindings::Plugin;
 use crate::host::{Capabilities, HostState};
-use crate::{ToolHost, ToolInvoke};
+use crate::{LlmHost, ToolHost, ToolInvoke};
 
 /// 默认给 guest 的燃料额度。
 ///
@@ -38,6 +38,7 @@ pub struct WasmPlugin {
     fuel: u64,
     logs: Arc<Mutex<Vec<String>>>,
     tools: Option<Rc<dyn ToolHost>>,
+    llm: Option<Rc<dyn LlmHost>>,
 }
 
 impl WasmPlugin {
@@ -76,12 +77,19 @@ impl WasmPlugin {
             fuel: DEFAULT_FUEL,
             logs: Arc::new(Mutex::new(Vec::new())),
             tools: None,
+            llm: None,
         })
     }
 
     /// 把 guest 在 `load` 里登记的工具接到宿主的工具表上。
     pub fn with_tools(mut self, tools: Rc<dyn ToolHost>) -> Self {
         self.tools = Some(tools);
+        self
+    }
+
+    /// 把 guest 在 `load` 里登记的 LLM 接到宿主的 `llm` 键上。
+    pub fn with_llm(mut self, llm: Rc<dyn LlmHost>) -> Self {
+        self.llm = Some(llm);
         self
     }
 
@@ -123,10 +131,16 @@ impl Component for WasmPlugin {
         Box::pin(async move {
             let view = self.capabilities.snapshot(&ctx, &self.granted)?;
             let pending_tools = Arc::new(Mutex::new(Vec::new()));
+            let pending_llm = Arc::new(Mutex::new(None));
 
             let mut store = Store::new(
                 &self.engine,
-                HostState::new(view, self.logs.clone(), pending_tools.clone()),
+                HostState::new(
+                    view,
+                    self.logs.clone(),
+                    pending_tools.clone(),
+                    pending_llm.clone(),
+                ),
             );
             store
                 .set_fuel(self.fuel)
@@ -165,6 +179,18 @@ impl Component for WasmPlugin {
                     let host = host.clone();
                     steps.step_sync(move || host.unregister(&name))?;
                 }
+            }
+
+            let model = pending_llm.lock().ok().and_then(|slot| slot.clone());
+            if let Some(model) = model {
+                let Some(host) = &self.llm else {
+                    return Err(Error::Component("guest 登记了 LLM，但宿主没接".into()));
+                };
+                let live = live.clone();
+                let fuel = self.fuel;
+                let invoke: ToolInvoke =
+                    Rc::new(move |args: &str| live.borrow_mut().invoke("__llm", args, fuel));
+                host.install(&ctx, model, invoke)?;
             }
 
             let fuel = self.fuel;

@@ -20,6 +20,12 @@ interface host {
     /// 真正的实现是 guest 导出的 `invoke`：这里只报名字和说明。撤销由宿主持有——
     /// 脚本把自己的 `unload` 删掉也拆得干净。
     register-tool: func(name: string, description: string);
+
+    /// 登记自己为 LLM 提供者。真正补全走 `invoke`，名字固定为 `__llm`。
+    ///
+    /// 原生插件用 `ctx.set` 提供 `llm`；guest 说不出那个键，所以走这扇门。
+    /// 安装发生在这个 fiber 的 `apply` 里，卸载时绑定跟着拆掉。
+    register-llm: func(model: string);
 }
 
 /// guest 必须导出的生命周期。

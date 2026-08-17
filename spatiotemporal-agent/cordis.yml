@@ -1,0 +1,32 @@
+# 基础组合。每一行是一项能力，跟 dsh 的 cordis.yml 同形。
+# 换实现：关掉旧行再 insert 新行（见 cordis.smoke.yml）。
+
+- id: doc
+  name: doc
+  config:
+    path: assets/sample.md
+
+- id: read-doc
+  name: read-doc
+
+- id: outline
+  name: wasm
+  config:
+    guest: outline
+    grant: [markdown]
+    role: 抽标题大纲
+
+- id: cite
+  name: script
+  config:
+    file: plugins/cite.js
+    grant: [markdown]
+    role: 按关键词引用原文
+
+- id: llm
+  name: deepseek
+
+- id: ui
+  name: web
+  config:
+    port: 8787

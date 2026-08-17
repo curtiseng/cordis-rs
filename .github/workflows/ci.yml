@@ -62,7 +62,8 @@ jobs:
       - run: cargo clippy -p spatiotemporal-script --all-targets -- -D warnings
       - run: cargo test -p spatiotemporal-script
 
-  # 三种基质的 agent 例子：编 outline.wasm，装插件，真的调一遍工具。不调 LLM。
+  # 三种基质的 agent 例子：编 outline.wasm，按 cordis.yml 装配，--smoke 叠一层
+  # patch 把 LLM 换成脚本 echo、界面换成 probe。不调真实 LLM。
   agent:
     runs-on: ubuntu-latest
     steps:
@@ -73,6 +74,6 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
       - run: ./scripts/build-guests.sh
-        working-directory: crates/markdown-agent
-      - run: cargo clippy -p markdown-agent --all-targets -- -D warnings
-      - run: cargo run -p markdown-agent -- --smoke
+        working-directory: spatiotemporal-agent
+      - run: cargo clippy -p spatiotemporal-agent --all-targets -- -D warnings
+      - run: cargo run -p spatiotemporal-agent -- --smoke

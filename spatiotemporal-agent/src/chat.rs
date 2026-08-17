@@ -1,6 +1,6 @@
 use serde_json::{Value, json};
 
-use crate::plugins::{Llm, Toolbox};
+use crate::host::{Llm, Toolbox};
 
 #[derive(Clone, serde::Serialize)]
 pub struct Trace {

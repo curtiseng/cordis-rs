@@ -1,12 +1,15 @@
 # 时空可组合性：一篇给 agent 读的短文
 
-这是 `markdown-agent` 的示例文档。下面三种工具应当都能从中挖出东西：
+这是 `spatiotemporal-agent` 的示例文档。下面这些插件应当都能从中挖出东西：
 
-- **read_doc**（本地插件）读到全文
-- **outline**（wasm 插件）抽出这些标题
-- **cite**（script 插件）按关键词引用段落
+- **read-doc**（native）读到全文
+- **outline**（wasm）抽出这些标题
+- **cite**（script）按关键词引用段落
+- **deepseek** 或 **echo**（native / script）提供 llm
+- **web** 或 **probe**（native）提供界面
 
 ## 可撤销 effect
+
 
 每个改动上下文的动作都配一个逆。逆是值，卸载时按后进先出回放。组件作者不写卸载路径——拆得干净这件事由抽象保证，不依赖每个人的勤谨程度。
 

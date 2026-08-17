@@ -1,7 +1,7 @@
 [package]
-name = "markdown-agent"
+name = "spatiotemporal-agent"
 version = "0.0.1"
-description = "用三种基质插件读一篇 Markdown、接 DeepSeek、在浏览器里对话"
+description = "一切都是插件：读一篇 Markdown、接 LLM、在浏览器里对话"
 publish = false
 edition.workspace = true
 license.workspace = true
@@ -12,13 +12,13 @@ rust-version = "1.94"
 workspace = true
 
 [[bin]]
-name = "markdown-agent"
+name = "spatiotemporal-agent"
 path = "src/main.rs"
 
 [dependencies]
 spatiotemporal.workspace = true
-spatiotemporal-wasm = { path = "../spatiotemporal-wasm" }
-spatiotemporal-script = { path = "../spatiotemporal-script" }
+spatiotemporal-wasm = { path = "../crates/spatiotemporal-wasm" }
+spatiotemporal-script = { path = "../crates/spatiotemporal-script" }
 futures.workspace = true
 serde.workspace = true
 serde_json.workspace = true
