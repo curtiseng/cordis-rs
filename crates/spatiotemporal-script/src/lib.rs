@@ -32,8 +32,19 @@
 //!    [`Runtime::set_interrupt_handler`]：引擎定期问一次「该停了吗」。一个
 //!    `unload` 里死循环的脚本会被它打断——这件事适配器自己做得完。
 
+use std::rc::Rc;
+
 mod component;
 mod host;
 
 pub use component::ScriptPlugin;
 pub use host::Capabilities;
+
+/// guest 登记一个工具时，宿主接到的那一面对。
+pub trait ToolHost: 'static {
+    fn register(&self, name: String, description: String, invoke: ToolInvoke);
+    fn unregister(&self, name: &str);
+}
+
+/// 调一个脚本工具：参数和返回值都是字符串（通常是 JSON）。
+pub type ToolInvoke = Rc<dyn Fn(&str) -> spatiotemporal::Result<String>>;

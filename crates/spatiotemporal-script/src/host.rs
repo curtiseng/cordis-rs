@@ -83,12 +83,16 @@ impl Capabilities {
     }
 }
 
-/// 把 `host.log` / `host.capability` 挂到全局。这就是脚本那一侧的 WIT world。
+/// 把 `host.log` / `host.capability` / `host.registerTool` 挂到全局。
 pub(crate) fn install_host<'js>(
     ctx: Ctx<'js>,
     view: HashMap<String, String>,
     logs: Arc<Mutex<Vec<String>>>,
+    pending_tools: Arc<Mutex<Vec<(String, String)>>>,
 ) -> rquickjs::Result<()> {
+    let tools_table = Object::new(ctx.clone())?;
+    ctx.globals().set("__tools", tools_table)?;
+
     let host = Object::new(ctx.clone())?;
 
     let logs_for_log = logs.clone();
@@ -104,8 +108,6 @@ pub(crate) fn install_host<'js>(
     host.set(
         "capability",
         Function::new(ctx.clone(), move |ctx: Ctx<'_>, name: String| {
-            // 没授予就是没有。guest 报一个没在配置里授予的名字，这里给的答案与
-            // 「宿主根本没登记过这项能力」完全一样——它无从区分，也就无从探测。
             match view.get(&name) {
                 Some(value) => Ok(value.clone()),
                 None => Err(Exception::throw_message(
@@ -116,5 +118,30 @@ pub(crate) fn install_host<'js>(
         })?,
     )?;
 
+    host.set(
+        "registerTool",
+        Function::new(ctx.clone(), {
+            let pending_tools = pending_tools.clone();
+            move |ctx, name, description, func| {
+                stash_tool(ctx, &pending_tools, name, description, func)
+            }
+        })?,
+    )?;
+
     ctx.globals().set("host", host)
+}
+
+fn stash_tool<'js>(
+    ctx: Ctx<'js>,
+    pending: &Arc<Mutex<Vec<(String, String)>>>,
+    name: String,
+    description: String,
+    func: Function<'js>,
+) -> rquickjs::Result<()> {
+    let table: Object<'js> = ctx.globals().get("__tools")?;
+    table.set(name.as_str(), func)?;
+    if let Ok(mut pending) = pending.lock() {
+        pending.push((name, description));
+    }
+    Ok(())
 }

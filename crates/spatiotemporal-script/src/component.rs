@@ -7,6 +7,7 @@ use rquickjs::{Context as JsContext, Function, Module, Runtime};
 use spatiotemporal::{Component, Context, Error, KeyId, Result, Steps};
 
 use crate::host::{Capabilities, install_host};
+use crate::{ToolHost, ToolInvoke};
 
 /// 默认给 guest 的中断次数上限。
 ///
@@ -27,6 +28,7 @@ pub struct ScriptPlugin {
     capabilities: Rc<Capabilities>,
     fuel: u64,
     logs: Arc<Mutex<Vec<String>>>,
+    tools: Option<Rc<dyn ToolHost>>,
 }
 
 impl ScriptPlugin {
@@ -56,7 +58,14 @@ impl ScriptPlugin {
             capabilities,
             fuel: DEFAULT_FUEL,
             logs: Arc::new(Mutex::new(Vec::new())),
+            tools: None,
         })
+    }
+
+    /// 把 guest 在 `load` 里登记的工具接到宿主的工具表上。
+    pub fn with_tools(mut self, tools: Rc<dyn ToolHost>) -> Self {
+        self.tools = Some(tools);
+        self
     }
 
     /// 改中断次数上限。
@@ -112,9 +121,10 @@ impl Component for ScriptPlugin {
             let logs = self.logs.clone();
             let source = self.source.clone();
             let name = self.name.clone();
+            let pending_tools = Arc::new(Mutex::new(Vec::new()));
 
             js.with(|js_ctx| -> Result<()> {
-                install_host(js_ctx.clone(), view, logs.clone())
+                install_host(js_ctx.clone(), view, logs.clone(), pending_tools.clone())
                     .map_err(js_error("接不上宿主接口"))?;
 
                 let module = Module::declare(js_ctx.clone(), format!("{name}.js"), source)
@@ -147,6 +157,35 @@ impl Component for ScriptPlugin {
                     .map_err(js_error("load 失败或被中断"))?;
                 Ok(())
             })?;
+
+            let registered: Vec<(String, String)> = pending_tools
+                .lock()
+                .map(|items| items.clone())
+                .unwrap_or_default();
+
+            if let Some(host) = &self.tools {
+                for (tool_name, description) in registered {
+                    let js = js.clone();
+                    let invoke_name = tool_name.clone();
+                    let invoke: ToolInvoke = Rc::new(move |args: &str| {
+                        js.with(|js_ctx| -> Result<String> {
+                            let table: rquickjs::Object = js_ctx
+                                .globals()
+                                .get("__tools")
+                                .map_err(js_error("工具表不见了"))?;
+                            let func: Function = table.get(invoke_name.as_str()).map_err(|_| {
+                                Error::Component(format!("没有这个工具：{invoke_name}"))
+                            })?;
+                            func.call((args.to_owned(),)).map_err(|error| {
+                                Error::Component(format!("调用 {invoke_name} 失败：{error}"))
+                            })
+                        })
+                    });
+                    host.register(tool_name.clone(), description, invoke);
+                    let host = host.clone();
+                    steps.step_sync(move || host.unregister(&tool_name))?;
+                }
+            }
 
             let name = self.name.clone();
             let logs = self.logs.clone();

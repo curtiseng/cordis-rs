@@ -1,0 +1,26 @@
+[package]
+name = "markdown-agent"
+version = "0.0.1"
+description = "用三种基质插件读一篇 Markdown、接 DeepSeek、在浏览器里对话"
+publish = false
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version = "1.94"
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "markdown-agent"
+path = "src/main.rs"
+
+[dependencies]
+spatiotemporal.workspace = true
+spatiotemporal-wasm = { path = "../spatiotemporal-wasm" }
+spatiotemporal-script = { path = "../spatiotemporal-script" }
+futures.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tiny_http = "0.12.0"
+ureq = { version = "2.12.1", features = ["json"] }

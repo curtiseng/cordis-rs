@@ -7,29 +7,31 @@ package composability:plugin;
 /// 这个接口就是能力面的**全部**。guest 说不出这里没有的话——不靠它自律，
 /// 而是靠 world 里没有别的 import。
 interface host {
-    /// 记一行日志。第一版只给这一件事，好把边界本身先钉住。
+    /// 记一行日志。
     log: func(message: string);
 
     /// 读一项能力。
     ///
     /// 只有宿主在配置里**授予**过、且 `Capabilities` 里登记过投影的名字才拿得到。
-    /// 这是论文算法 6 那道「访问在使用点被强制」落在跨语言边界上的样子。
     capability: func(name: string) -> result<string, string>;
+
+    /// 登记一个工具，供宿主在这个 fiber 活着的时候调用。
+    ///
+    /// 真正的实现是 guest 导出的 `invoke`：这里只报名字和说明。撤销由宿主持有——
+    /// 脚本把自己的 `unload` 删掉也拆得干净。
+    register-tool: func(name: string, description: string);
 }
 
 /// guest 必须导出的生命周期。
 interface lifecycle {
     /// 装上。返回 err 即这次加载失败，宿主会回卷已登记的逆。
-    ///
-    /// 这里**没有**「注册一个工具」之类的具体动作：guest 能做的事全在 host 那个
-    /// import 面里。
     load: func() -> result<_, string>;
 
     /// 拆掉。这就是 guest 那一侧的逆。
-    ///
-    /// 宿主把它包进 `steps.step_sync`，于是它跟原生组件的逆排在同一个 LIFO
-    /// 序列里，由同一套惯性状态机调度。
     unload: func();
+
+    /// 跑一个在 `load` 里登记过的工具。`args` 是 JSON 文本。
+    invoke: func(name: string, args: string) -> result<string, string>;
 }
 
 world plugin {

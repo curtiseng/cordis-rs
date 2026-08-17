@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::path::Path;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
@@ -9,6 +10,7 @@ use wasmtime::{Config, Engine, Store};
 
 use crate::bindings::Plugin;
 use crate::host::{Capabilities, HostState};
+use crate::{ToolHost, ToolInvoke};
 
 /// 默认给 guest 的燃料额度。
 ///
@@ -35,6 +37,7 @@ pub struct WasmPlugin {
     capabilities: Rc<Capabilities>,
     fuel: u64,
     logs: Arc<Mutex<Vec<String>>>,
+    tools: Option<Rc<dyn ToolHost>>,
 }
 
 impl WasmPlugin {
@@ -72,7 +75,14 @@ impl WasmPlugin {
             capabilities,
             fuel: DEFAULT_FUEL,
             logs: Arc::new(Mutex::new(Vec::new())),
+            tools: None,
         })
+    }
+
+    /// 把 guest 在 `load` 里登记的工具接到宿主的工具表上。
+    pub fn with_tools(mut self, tools: Rc<dyn ToolHost>) -> Self {
+        self.tools = Some(tools);
+        self
     }
 
     /// 改燃料额度。
@@ -112,8 +122,12 @@ impl Component for WasmPlugin {
     fn apply(&self, ctx: Context, steps: Steps) -> LocalBoxFuture<'_, Result<()>> {
         Box::pin(async move {
             let view = self.capabilities.snapshot(&ctx, &self.granted)?;
+            let pending_tools = Arc::new(Mutex::new(Vec::new()));
 
-            let mut store = Store::new(&self.engine, HostState::new(view, self.logs.clone()));
+            let mut store = Store::new(
+                &self.engine,
+                HostState::new(view, self.logs.clone(), pending_tools.clone()),
+            );
             store
                 .set_fuel(self.fuel)
                 .map_err(wasm_error("加不进燃料"))?;
@@ -127,34 +141,67 @@ impl Component for WasmPlugin {
             let bindings = Plugin::instantiate(&mut store, &self.component, &linker)
                 .map_err(wasm_error("实例化失败"))?;
 
-            // 外层 Err 是陷入（trap / 燃料耗尽），内层 Err 是 guest 自己报的失败。
-            // 两者都算这次加载失败，但要分开说，否则排查时分不清是谁的问题。
             bindings
                 .composability_plugin_lifecycle()
                 .call_load(&mut store)
                 .map_err(wasm_error("load 陷入"))?
                 .map_err(|message| Error::Component(format!("guest 的 load 失败：{message}")))?;
 
+            let live = Rc::new(RefCell::new(Live { store, bindings }));
+            let registered: Vec<(String, String)> = pending_tools
+                .lock()
+                .map(|items| items.clone())
+                .unwrap_or_default();
+
+            if let Some(host) = &self.tools {
+                for (name, description) in registered {
+                    let live = live.clone();
+                    let fuel = self.fuel;
+                    let invoke_name = name.clone();
+                    let invoke: ToolInvoke = Rc::new(move |args: &str| {
+                        live.borrow_mut().invoke(&invoke_name, args, fuel)
+                    });
+                    host.register(name.clone(), description, invoke);
+                    let host = host.clone();
+                    steps.step_sync(move || host.unregister(&name))?;
+                }
+            }
+
             let fuel = self.fuel;
             let name = self.name.clone();
             let logs = self.logs.clone();
             steps.step_sync(move || {
-                // 重新加满：如果 load 把燃料用得差不多了，unload 会当场耗尽而
-                // 陷入——那样逆就没跑成，而逆是不允许「没跑成」的。
-                let _ = store.set_fuel(fuel);
-                let outcome = bindings
-                    .composability_plugin_lifecycle()
-                    .call_unload(&mut store);
+                let outcome = live.borrow_mut().unload(fuel);
                 if let Err(error) = outcome
                     && let Ok(mut logs) = logs.lock()
                 {
-                    // 逆的签名不返回错误，也不该返回：调用方无从补救。所以一个
-                    // 陷入的 unload 只能被记下来。这就是它必须有燃料上限的原因——
-                    // 卡住的逆会拖死整次卸载，而卸载没有别的出路。
                     logs.push(format!("{name} 的 unload 陷入了：{error}"));
                 }
             })
         })
+    }
+}
+
+struct Live {
+    store: Store<HostState>,
+    bindings: Plugin,
+}
+
+impl Live {
+    fn invoke(&mut self, name: &str, args: &str, fuel: u64) -> Result<String> {
+        let _ = self.store.set_fuel(fuel);
+        let (store, bindings) = (&mut self.store, &self.bindings);
+        bindings
+            .composability_plugin_lifecycle()
+            .call_invoke(store, name, args)
+            .map_err(wasm_error("invoke 陷入"))?
+            .map_err(|message| Error::Component(format!("工具 {name} 失败：{message}")))
+    }
+
+    fn unload(&mut self, fuel: u64) -> wasmtime::Result<()> {
+        let _ = self.store.set_fuel(fuel);
+        let (store, bindings) = (&mut self.store, &self.bindings);
+        bindings.composability_plugin_lifecycle().call_unload(store)
     }
 }
 

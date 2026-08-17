@@ -1,0 +1,17 @@
+[package]
+name = "outline"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.60.0"
+
+[profile.release]
+opt-level = "s"
+strip = true

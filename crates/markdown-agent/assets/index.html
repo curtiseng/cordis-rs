@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Markdown Agent</title>
+  <style>
+    :root {
+      --bg: #14120e;
+      --paper: #1c1914;
+      --ink: #ebe4d4;
+      --muted: #9a917e;
+      --line: #3a3428;
+      --native: #c4a35a;
+      --wasm: #6aa6a6;
+      --script: #c47a6a;
+      --accent: #e8d5a3;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 15px/1.55 "Iowan Old Style", "Palatino Linotype", Palatino, "Songti SC", serif; }
+    body { display: grid; grid-template-columns: 280px 1fr 340px; min-height: 100%; }
+    aside, main { border-right: 1px solid var(--line); }
+    aside { padding: 28px 22px; background: var(--paper); overflow: auto; }
+    h1 { font-size: 18px; font-weight: 600; margin: 0 0 6px; letter-spacing: 0.04em; }
+    .sub { color: var(--muted); font-size: 12px; margin-bottom: 28px; }
+    .card { border: 1px solid var(--line); padding: 12px 14px; margin-bottom: 10px; }
+    .tag { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; }
+    .tag.native { color: var(--native); }
+    .tag.wasm { color: var(--wasm); }
+    .tag.script { color: var(--script); }
+    .name { font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+    .desc { color: var(--muted); font-size: 12px; margin-top: 4px; }
+    main { display: flex; flex-direction: column; min-width: 0; }
+    #log { flex: 1; overflow: auto; padding: 28px 32px; }
+    .msg { margin: 0 0 22px; max-width: 42em; }
+    .msg .who { font-size: 11px; color: var(--muted); letter-spacing: 0.08em; margin-bottom: 6px; }
+    .msg.user { color: var(--accent); }
+    .trace { font-family: ui-monospace, Menlo, monospace; font-size: 12px; border-left: 2px solid var(--line); padding: 6px 12px; margin: 8px 0; color: var(--muted); white-space: pre-wrap; }
+    form { display: flex; gap: 8px; padding: 16px 32px 24px; border-top: 1px solid var(--line); }
+    textarea { flex: 1; resize: none; height: 72px; background: var(--paper); color: var(--ink); border: 1px solid var(--line); padding: 10px 12px; font: inherit; }
+    button { background: var(--accent); color: var(--bg); border: 0; padding: 0 18px; font: 13px/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.08em; cursor: pointer; }
+    button:disabled { opacity: 0.4; cursor: wait; }
+    #doc { padding: 28px 22px; overflow: auto; background: #12100c; }
+    #doc pre { white-space: pre-wrap; font: 12px/1.5 ui-monospace, Menlo, monospace; color: var(--muted); margin: 0; }
+    @media (max-width: 960px) {
+      body { grid-template-columns: 1fr; }
+      #doc, aside { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <aside>
+    <h1>三种基质</h1>
+    <div class="sub">同一棵 fiber 树，拆掉就干净</div>
+    <div id="plugins"></div>
+    <h1 style="margin-top:28px">工具</h1>
+    <div class="sub" id="model"></div>
+    <div id="tools"></div>
+  </aside>
+  <main>
+    <div id="log"></div>
+    <form id="form">
+      <textarea id="input" placeholder="问这篇文档……" required></textarea>
+      <button type="submit">发送</button>
+    </form>
+  </main>
+  <section id="doc"><pre id="doc-text">加载文档…</pre></section>
+  <script>
+    const logEl = document.getElementById("log");
+    const history = [];
+    const $ = (sel) => document.querySelector(sel);
+
+    function card(item, extra) {
+      const div = document.createElement("div");
+      div.className = "card";
+      div.innerHTML = `<div class="tag ${item.substrate}">${item.substrate}</div>
+        <div class="name">${item.name}</div>
+        <div class="desc">${extra || item.description || item.role || ""}</div>`;
+      return div;
+    }
+
+    async function boot() {
+      const status = await (await fetch("/api/status")).json();
+      $("#model").textContent = status.model + (status.has_key ? "" : " · 缺 DEEPSEEK_API_KEY");
+      status.plugins.forEach((p) => $("#plugins").appendChild(card(p, p.role)));
+      status.tools.forEach((t) => $("#tools").appendChild(card(t)));
+      const doc = await (await fetch("/api/doc")).json();
+      $("#doc-text").textContent = doc.text;
+    }
+
+    function add(who, text, cls) {
+      const div = document.createElement("div");
+      div.className = "msg " + (cls || "");
+      div.innerHTML = `<div class="who">${who}</div><div>${escapeHtml(text)}</div>`;
+      logEl.appendChild(div);
+      logEl.scrollTop = logEl.scrollHeight;
+      return div;
+    }
+
+    function escapeHtml(s) {
+      return s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+    }
+
+    $("#form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const input = $("#input");
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = "";
+      add("你", text, "user");
+      const btn = $("button");
+      btn.disabled = true;
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: text, history }),
+        });
+        const turn = await res.json();
+        (turn.traces || []).forEach((t) => {
+          const el = add(`${t.substrate} · ${t.tool}`, t.output.slice(0, 1200));
+          el.querySelector("div:last-child").className = "trace";
+        });
+        add("讲解员", turn.reply || turn.error || "没有回复");
+        history.push({ role: "user", content: text });
+        history.push({ role: "assistant", content: turn.reply || "" });
+      } catch (err) {
+        add("系统", String(err));
+      }
+      btn.disabled = false;
+      input.focus();
+    });
+
+    boot();
+  </script>
+</body>
+</html>

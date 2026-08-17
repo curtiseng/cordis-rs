@@ -22,7 +22,6 @@ impl Guest for Runaway {
 
     fn unload() {
         log("runaway 开始赖着不走");
-        // 空循环会被优化掉，所以塞点副作用进去。
         let mut n: u64 = 0;
         loop {
             n = n.wrapping_add(1);
@@ -30,6 +29,10 @@ impl Guest for Runaway {
                 log("到不了这里");
             }
         }
+    }
+
+    fn invoke(_name: String, _args: String) -> Result<String, String> {
+        Err("runaway 没有工具".into())
     }
 }
 

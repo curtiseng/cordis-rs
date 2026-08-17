@@ -27,6 +27,8 @@
 //! 3. **guest 的逆必须可抢占。** 一个卡住的 `unload` 会拖死整次卸载，因此这里给它
 //!    设期限并用 epoch 打断——这件事适配器自己做得完，不需要内核配合。
 
+use std::rc::Rc;
+
 mod component;
 mod host;
 
@@ -40,3 +42,15 @@ mod bindings {
 
 pub use component::WasmPlugin;
 pub use host::{Capabilities, HostState};
+
+/// guest 登记一个工具时，宿主接到的那一面对。
+///
+/// 适配器在 `load` 成功之后把每个工具接进来，并在这个 fiber 的逆里拆掉。
+/// 撤销由宿主持有，guest 破坏不了自己的清理。
+pub trait ToolHost: 'static {
+    fn register(&self, name: String, description: String, invoke: ToolInvoke);
+    fn unregister(&self, name: &str);
+}
+
+/// 调一个 wasm 工具：参数和返回值都是字符串（通常是 JSON）。
+pub type ToolInvoke = Rc<dyn Fn(&str) -> spatiotemporal::Result<String>>;

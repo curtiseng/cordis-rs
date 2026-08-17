@@ -101,15 +101,22 @@ pub struct HostState {
     table: ResourceTable,
     view: HashMap<String, String>,
     logs: Arc<Mutex<Vec<String>>>,
+    /// `load` 期间 guest 报上来的工具。真正接到 [`ToolHost`] 是 `apply` 的事。
+    pending_tools: Arc<Mutex<Vec<(String, String)>>>,
 }
 
 impl HostState {
-    pub(crate) fn new(view: HashMap<String, String>, logs: Arc<Mutex<Vec<String>>>) -> Self {
+    pub(crate) fn new(
+        view: HashMap<String, String>,
+        logs: Arc<Mutex<Vec<String>>>,
+        pending_tools: Arc<Mutex<Vec<(String, String)>>>,
+    ) -> Self {
         HostState {
             wasi: WasiCtxBuilder::new().build(),
             table: ResourceTable::new(),
             view,
             logs,
+            pending_tools,
         }
     }
 }
@@ -137,5 +144,11 @@ impl Host for HostState {
             .get(&name)
             .cloned()
             .ok_or_else(|| format!("没有授予这项能力：{name}"))
+    }
+
+    fn register_tool(&mut self, name: String, description: String) {
+        if let Ok(mut pending) = self.pending_tools.lock() {
+            pending.push((name, description));
+        }
     }
 }
