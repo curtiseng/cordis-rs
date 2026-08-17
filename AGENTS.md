@@ -160,7 +160,7 @@ cargo run -p spatiotemporal-agent -- --creation   # 创造模式
 4. **注释**：只解释非显而易见的业务/演算细节；不要复述代码。
 5. **测试**：内核行为改动机理测试；配置改 `tests/loader.rs` / `tests/config.rs`；agent 至少 `--smoke`。
 6. **新 native 插件**：`plugins/*.rs` + `plugins/mod.rs` + `registry.rs` + `cordis.yml` 一行；需要键则改 `keys.rs`。
-7. **不要**在 agent 层用 `std::process` 直接冒充一等 fiber；子进程插件走 `spatiotemporal-process` + registry `process`。不要假装已有 dsh 的 session fork、MCP 官方客户端、PTY、compaction。
+7. **不要**在 agent 层用 `std::process` 直接冒充一等 fiber；子进程插件走 `spatiotemporal-process` + registry `process`。不要假装已有 dsh 的 session fork、MCP 官方客户端、PTY；compaction 已有初版，但勿夸大成完整事件流压缩。
 8. **提交**：用户明确要求才 commit；不 force push main。
 
 ---

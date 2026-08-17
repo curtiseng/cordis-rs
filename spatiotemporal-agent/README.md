@@ -63,9 +63,11 @@ cargo run -p spatiotemporal-agent -- --creation   # 启动即创造模式
 
 也可 `POST /api/mode`：`{"creation": true}`。
 
-看到 `打开 http://127.0.0.1:8787` 后，用浏览器打开。默认读 `assets/sample.md`（demo  tour，含四种基质与工具场景说明）。界面里有**试玩按钮**；完整脚本见 [`DEMO.md`](DEMO.md)。
+看到 `打开 http://127.0.0.1:8787` 后，用浏览器打开。默认读 `assets/sample.md`（demo  tour，含四种基质与工具场景说明）。界面里有**试玩按钮**；完整脚本见 [`DEMO.md`](DEMO.md)。右侧文档与讲解员回复会渲染 Markdown（依赖 jsDelivr 上的 marked@15 / DOMPurify@3；离线时回退纯文本）。
 
-多轮对话会保留 tool 消息，模型能记住之前调用了哪些工具。会话持久化到工作区 `.agent/sessions/*.jsonl`（浏览器 localStorage 保存 session id，刷新后自动恢复）。`agent-loop` 会在上下文过长时按 `cordis.yml` 的 `compaction` 配置压缩 history（截断 tool 输出、保留最近 N 条）。
+**左栏**：**plugins** = 已挂载 fiber 组件；**tools** = LLM 可调用的函数（native 常一对多，script/wasm 叶子常与插件同名）。完整配置树用创造模式 `inspect_config` 查看。
+
+多轮对话会保留 tool 消息，模型能记住之前调用了哪些工具。会话持久化到工作区 `.agent/sessions/*.jsonl`（浏览器 localStorage 保存 session id；**history 供 API 恢复，刷新后聊天 UI 不重放**）。`agent-loop` 会在上下文过长时按 `cordis.yml` 的 `compaction` 配置压缩 history（截断 tool 输出、保留最近 N 条）。
 
 在工作区根目录放 `AGENTS.md` 可注入项目级指令；`system-prompt` 插件还会把各工具的 JSON schema 写进 system prompt。
 

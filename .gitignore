@@ -8,3 +8,4 @@
 /spatiotemporal-agent/plugins/generated/*.js
 .env
 spatiotemporal-agent/.env
+.agent/

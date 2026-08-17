@@ -13,7 +13,14 @@ export DEEPSEEK_API_KEY=sk-你的key   # 标准模式；smoke 不需要
 cargo run -p spatiotemporal-agent
 ```
 
-打开 http://127.0.0.1:8787 。界面左侧是**插件树**（基质颜色：native / wasm / script），中间会话，右侧 `assets/sample.md`。
+打开 http://127.0.0.1:8787 。界面左侧是 **plugins**（已挂载 fiber 组件）与 **tools**（LLM 可调用函数；叶子 script 常与插件同名），中间会话（讲解员回复渲染 Markdown），右侧 `assets/sample.md`（同样渲染 Markdown，需 jsDelivr CDN 加载 marked/DOMPurify）。
+
+### 左栏 plugins vs tools
+
+| 栏 | 含义 | 例子 |
+|---|---|---|
+| plugins | 运行时 fiber 组件 | `fs-sandbox`、`tool-fs`、`stats`、`creation-tools` |
+| tools | 模型 function call 入口 | `read`/`write`/`edit`（来自 `tool-fs`）、`stats`、`outline` |
 
 ### 推荐第一轮
 
@@ -35,7 +42,7 @@ cargo run -p spatiotemporal-agent
 
 ### Session
 
-刷新页面后会话应恢复（localStorage + `.agent/sessions/`）。可连续多轮追问「刚才 stats 的结果是多少」。
+刷新后 **API history** 会从 localStorage + `.agent/sessions/` 恢复（供下一轮对话），但**中间聊天记录 UI 不会重放**；可连续多轮追问「刚才 stats 的结果是多少」。
 
 ---
 
@@ -117,3 +124,4 @@ cargo run -p spatiotemporal-agent
 | 缺 DEEPSEEK_API_KEY | `export` 后重启，或用 `--smoke` |
 | 创造模式 define 没生效 | 浏览器点「批准」；看 `.agent/approvals.jsonl` |
 | 端口占用 | `PORT=8788 cargo run -p spatiotemporal-agent` |
+| 右侧/回复无 Markdown 样式 | 检查网络能否访问 jsDelivr（marked@15、DOMPurify@3）；离线时回退纯文本 |
