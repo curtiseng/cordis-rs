@@ -4,8 +4,8 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use cordis::{Component, Context, KeyId, Result, Steps};
 use futures::future::LocalBoxFuture;
+use spatiotemporal::{Component, Context, KeyId, Result, Steps};
 
 /// 观察 effect 与逆的执行顺序。
 #[derive(Clone, Default)]

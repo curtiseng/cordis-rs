@@ -21,7 +21,7 @@ pub type Factory = Box<dyn Fn(&Value) -> Result<Rc<dyn Component>>>;
 /// [`Loader`](crate::Loader) 在运行中完成，这正是配置热重载所要的全部。
 ///
 /// ```
-/// use cordis::{Component, Context, Registry, Result, Steps};
+/// use spatiotemporal::{Component, Context, Registry, Result, Steps};
 /// use futures::future::LocalBoxFuture;
 ///
 /// #[derive(serde::Deserialize)]

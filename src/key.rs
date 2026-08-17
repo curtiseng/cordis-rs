@@ -10,7 +10,7 @@ use crate::error::{Error, Result};
 /// 被不同 provider 以不同实现满足（6.2 节的排他绑定）。
 ///
 /// ```
-/// use cordis::Key;
+/// use spatiotemporal::Key;
 ///
 /// trait Database {
 ///     fn query(&self) -> String;
@@ -63,7 +63,7 @@ impl KeyId {
 /// 掌握着可被动态声明的能力面**——一个 guest 说不出宿主没登记的键。
 ///
 /// ```
-/// use cordis::{Key, KeyRegistry};
+/// use spatiotemporal::{Key, KeyRegistry};
 ///
 /// trait Tools {}
 /// enum ToolsKey {}

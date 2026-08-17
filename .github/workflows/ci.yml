@@ -9,7 +9,8 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  check:
+  # 内核：一份依赖极少、不碰 IO 的库，外加两个示例。
+  kernel:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,8 +18,34 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
-      - run: cargo fmt --check
+      - run: cargo fmt --all --check
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test
       - run: cargo run --example swap_provider
       - run: cargo run --example watch_config
+
+  # 内核声明 MSRV 1.85，但 lockfile 是整个 workspace 共享的——卫星 crate 拉高某个
+  # 共享依赖的版本，就可能把内核的实际 MSRV 悄悄推上去。这个 job 就是那道哨兵：
+  # 它一红，要么放宽声明，要么把依赖钉回去。
+  msrv:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.85.0
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build -p spatiotemporal
+
+  # wasm 适配器：自己的 MSRV（wasmtime 要 1.94），测试要真的 guest 产物。
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip2
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: ./scripts/build-guests.sh
+        working-directory: crates/spatiotemporal-wasm
+      - run: cargo clippy -p spatiotemporal-wasm --all-targets -- -D warnings
+      - run: cargo test -p spatiotemporal-wasm

@@ -12,11 +12,11 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use common::{Log, Probe, Service, Tagged};
-use cordis::{
+use futures::future::LocalBoxFuture;
+use spatiotemporal::{
     App, Component, Entry, FnComponent, Kernel, Key, KeyRegistry, Loader, Registry, Spawn, State,
     Value,
 };
-use futures::future::LocalBoxFuture;
 
 /* ------------------------------------------------------------------ */
 /* 一、名字可以是运行时才知道的                                        */
@@ -136,7 +136,7 @@ fn an_unregistered_name_cannot_be_declared() {
     keys.add::<Db>();
 
     let error = keys.resolve("sandbox").expect_err("没登记");
-    assert_eq!(error, cordis::Error::UnknownKey("sandbox".into()));
+    assert_eq!(error, spatiotemporal::Error::UnknownKey("sandbox".into()));
     assert_eq!(keys.names(), vec!["db"]);
 }
 

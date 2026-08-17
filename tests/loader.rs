@@ -8,7 +8,7 @@ mod common;
 use std::rc::Rc;
 
 use common::{Log, Probe, Service, Tagged, yield_once};
-use cordis::{App, Component, Entry, Error, Key, KeyId, Loader, Registry, State, Value};
+use spatiotemporal::{App, Component, Entry, Error, Key, KeyId, Loader, Registry, State, Value};
 
 enum Db {}
 impl Key for Db {
@@ -17,7 +17,10 @@ impl Key for Db {
 }
 
 /// 一个普通的行：加载时记一笔，卸载时记一笔，并把 config 里的 `tag` 带上。
-fn plain(log: Log, name: &'static str) -> impl Fn(&Value) -> cordis::Result<Rc<dyn Component>> {
+fn plain(
+    log: Log,
+    name: &'static str,
+) -> impl Fn(&Value) -> spatiotemporal::Result<Rc<dyn Component>> {
     move |config: &Value| {
         let tag = config
             .get("tag")
@@ -52,7 +55,10 @@ fn plain(log: Log, name: &'static str) -> impl Fn(&Value) -> cordis::Result<Rc<d
 }
 
 /// 提供 `db` 的行。
-fn provider(log: Log, tag: &'static str) -> impl Fn(&Value) -> cordis::Result<Rc<dyn Component>> {
+fn provider(
+    log: Log,
+    tag: &'static str,
+) -> impl Fn(&Value) -> spatiotemporal::Result<Rc<dyn Component>> {
     move |_config: &Value| {
         let log = log.clone();
         Ok(Probe::new("provider", move |ctx, _steps| {
@@ -67,7 +73,7 @@ fn provider(log: Log, tag: &'static str) -> impl Fn(&Value) -> cordis::Result<Rc
 }
 
 /// 依赖 `db` 的行。
-fn consumer(log: Log) -> impl Fn(&Value) -> cordis::Result<Rc<dyn Component>> {
+fn consumer(log: Log) -> impl Fn(&Value) -> spatiotemporal::Result<Rc<dyn Component>> {
     move |_config: &Value| {
         let log = log.clone();
         Ok(

@@ -7,7 +7,7 @@ mod common;
 use std::rc::Rc;
 
 use common::{Log, Probe};
-use cordis::{App, State};
+use spatiotemporal::{App, State};
 
 /// 定理 61：逆按 LIFO 回放，因此后装的先撤。
 #[test]
@@ -92,7 +92,7 @@ fn failure_rolls_back_completed_steps() {
                 let b = log.clone();
                 steps.step(move || async move { b.push("撤 b") })?;
 
-                Err(cordis::Error::msg("第三步失败了"))
+                Err(spatiotemporal::Error::msg("第三步失败了"))
             })
         })
     };

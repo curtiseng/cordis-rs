@@ -17,7 +17,7 @@
 //! # 一个例子
 //!
 //! ```
-//! use cordis::{App, Component, Context, Key, Result, State, Steps};
+//! use spatiotemporal::{App, Component, Context, Key, Result, State, Steps};
 //! use futures::future::LocalBoxFuture;
 //! use std::cell::RefCell;
 //! use std::rc::Rc;
@@ -54,7 +54,7 @@
 //! struct Consumer(Rc<RefCell<Vec<String>>>);
 //! impl Component for Consumer {
 //!     fn name(&self) -> &'static str { "consumer" }
-//!     fn inject(&self) -> Vec<cordis::KeyId> { vec![cordis::KeyId::of::<Hello>()] }
+//!     fn inject(&self) -> Vec<spatiotemporal::KeyId> { vec![spatiotemporal::KeyId::of::<Hello>()] }
 //!     fn apply(&self, ctx: Context, _steps: Steps) -> LocalBoxFuture<'_, Result<()>> {
 //!         let log = self.0.clone();
 //!         Box::pin(async move {
@@ -92,14 +92,14 @@
 //! 可撤销 effect 的一个应用，而不是它之外的另一套东西**。
 //!
 //! ```
-//! use cordis::{App, Entry, FnComponent, Loader, Registry, State};
+//! use spatiotemporal::{App, Entry, FnComponent, Loader, Registry, State};
 //! use std::rc::Rc;
 //!
 //! let mut registry = Registry::new();
 //! registry.add("noop", |_config| {
 //!     Ok(Rc::new(FnComponent::new("noop", |_ctx, _steps| {
 //!         Box::pin(async { Ok(()) })
-//!     })) as Rc<dyn cordis::Component>)
+//!     })) as Rc<dyn spatiotemporal::Component>)
 //! });
 //!
 //! let mut app = App::new();

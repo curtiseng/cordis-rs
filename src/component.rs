@@ -31,7 +31,7 @@ pub trait Component: 'static {
 /// 用闭包写一个组件。
 ///
 /// ```
-/// use cordis::{App, FnComponent, State};
+/// use spatiotemporal::{App, FnComponent, State};
 /// use std::rc::Rc;
 ///
 /// let mut app = App::new();

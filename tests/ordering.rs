@@ -8,7 +8,7 @@ mod common;
 use std::rc::Rc;
 
 use common::{Log, Probe, Service, Tagged};
-use cordis::{App, Key, KeyId, State};
+use spatiotemporal::{App, Key, KeyId, State};
 
 enum Db {}
 impl Key for Db {

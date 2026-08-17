@@ -1,0 +1,42 @@
+//! 把 WebAssembly 组件接成时空可组合性演算里的一等 fiber。
+//!
+//! # 为什么这是一个独立的 crate
+//!
+//! 因为**基质不是内核概念**。[`spatiotemporal::Registry`] 已经是「名字 → 构造器」，
+//! 所以一个 wasm 插件只是 [`spatiotemporal::Component`] 的又一种实现：它的 `apply`
+//! 去实例化一个 wasm 组件，把 guest 的 `unload` 用 `steps.step` 登记成逆。内核不需要
+//! 知道 wasm 存在。
+//!
+//! 分开的实际理由是依赖性质：内核有 5 个依赖、零 IO、MSRV 1.85；wasmtime 一家就带
+//! 上百个 crate，MSRV 1.94。想读演算的人不该被迫编译一个 wasm 运行时。
+//!
+//! # 内核为此让出的三处
+//!
+//! - [`spatiotemporal::Component::name`] 返回 `&str`：名字来自 `.wasm` 文件。
+//! - [`spatiotemporal::KeyRegistry`]：guest 只能用字符串声明依赖，宿主负责翻译，
+//!   于是 guest 说不出宿主没登记的能力。
+//! - [`spatiotemporal::Spawn`]：宿主自带执行器，wasm 的异步调用才有地方跑。
+//!
+//! # 三条不会因为写得好而消失的限制
+//!
+//! 1. **guest 不能引入新的 coeffect 种类给原生插件消费。** 原生侧拿到的是
+//!    `Rc<dyn Trait>`，那个 trait 必须在宿主编译期就存在。所以 `wit/plugin.wit`
+//!    里的 world 决定了 guest 能提供什么，而不是 guest 自己决定。
+//! 2. **大 payload 的高频事件过边界要付序列化代价。** 叶子工具（调用稀疏、
+//!    payload 小）是甜点区；流式事件不是。
+//! 3. **guest 的逆必须可抢占。** 一个卡住的 `unload` 会拖死整次卸载，因此这里给它
+//!    设期限并用 epoch 打断——这件事适配器自己做得完，不需要内核配合。
+
+mod component;
+mod host;
+
+/// bindgen 的产物关在这里，免得 WIT 的包名跑到 crate 根上。
+mod bindings {
+    wasmtime::component::bindgen!({
+        path: "wit",
+        world: "plugin",
+    });
+}
+
+pub use component::WasmPlugin;
+pub use host::{Capabilities, HostState};

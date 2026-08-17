@@ -8,7 +8,7 @@ mod common;
 use std::rc::Rc;
 
 use common::{Log, Probe, Service, Tagged};
-use cordis::{App, Key, KeyId, State};
+use spatiotemporal::{App, Key, KeyId, State};
 
 enum Db {}
 impl Key for Db {
@@ -22,7 +22,7 @@ impl Key for Cache {
     const NAME: &'static str = "cache";
 }
 
-fn provider(tag: &'static str, log: Log) -> Rc<impl cordis::Component> {
+fn provider(tag: &'static str, log: Log) -> Rc<impl spatiotemporal::Component> {
     Probe::new("provider", move |ctx, _steps| {
         let log = log.clone();
         Box::pin(async move {
@@ -33,7 +33,7 @@ fn provider(tag: &'static str, log: Log) -> Rc<impl cordis::Component> {
     })
 }
 
-fn consumer(name: &'static str, log: Log) -> Rc<impl cordis::Component> {
+fn consumer(name: &'static str, log: Log) -> Rc<impl spatiotemporal::Component> {
     Probe::needs(name, vec![KeyId::of::<Db>()], move |ctx, steps| {
         let log = log.clone();
         Box::pin(async move {
@@ -149,7 +149,7 @@ fn access_is_mediated_by_the_declaration() {
                 // 没声明的键：即使别处提供了，也是 Undeclared。
                 assert!(matches!(
                     ctx.resolve::<Cache>(),
-                    Err(cordis::Error::Undeclared("cache"))
+                    Err(spatiotemporal::Error::Undeclared("cache"))
                 ));
                 Ok(())
             })
@@ -172,7 +172,7 @@ fn root_context_rejects_undeclared_access() {
     let root = app.root();
     assert!(matches!(
         root.resolve::<Db>(),
-        Err(cordis::Error::Undeclared("db"))
+        Err(spatiotemporal::Error::Undeclared("db"))
     ));
     // 裸查询永不失败，只是没有值。
     assert!(root.lookup::<Db>().is_none());

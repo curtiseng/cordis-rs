@@ -1,4 +1,4 @@
-# cordis-rs
+# spatiotemporal
 
 时空可组合性演算的 Rust 实现。
 
@@ -35,10 +35,22 @@ impl Component for Worker {
 
 ```toml
 [dependencies]
-cordis-rs = { git = "https://github.com/curtiseng/cordis-rs" }
+spatiotemporal = { git = "https://github.com/curtiseng/cordis-rs" }
 ```
 
-crate 名是 `cordis`（包名跟仓库对齐）。完整的最小例子见 `src/lib.rs` 顶部的文档，`cargo test --doc` 会真的把它跑一遍。
+完整的最小例子见 `src/lib.rs` 顶部的文档，`cargo test --doc` 会真的把它跑一遍。
+
+包名叫 `spatiotemporal` 而仓库还叫 `cordis-rs`，是因为 crates.io 上的 `cordis-rs` 已经属于[另一个项目](https://github.com/dshbox/cordis-rs)——那是 Cordis **框架 API 面**的移植（service、events、reflect、logger），这里是**演算本身**的实现，测试逐条对着定理写。两件不同的事，名字撞了而已。
+
+## 仓库结构
+
+```
+Cargo.toml                      # 内核，同时是 workspace 根
+src/ tests/ examples/
+crates/spatiotemporal-wasm/     # wasm 基质适配器，独立版本、独立发布
+```
+
+`default-members` 只含内核，所以 `cargo test` 不会去编一个 wasm 运行时——内核有 5 个依赖、MSRV 1.85，而 wasmtime 一家就带上百个、要 1.94。但 **lockfile 是整个 workspace 共享的**（`default-members` 只影响编译，不影响解析），所以卫星 crate 理论上能把某个共享依赖的版本拉高、把内核的实际 MSRV 悄悄推上去。CI 里有一个钉在 1.85 上只编内核的 job 专门守这件事。
 
 ## 配置热重载
 
@@ -125,6 +137,42 @@ let kernel = Kernel::new(Rc::new(spawner));      // App 是自带执行器的那
 
 一处值得知道的实现细节：`inertia` 是 `Shared`，谁 await 谁承担 poll，所以 `quiesce()` 会把它等的那次转换就地驱动完，不依赖宿主执行器是否勤快。丢弃任务的实际后果是「没有任何依赖方去等的转换会一直停在飞行中」，而不是死锁。
 
+## wasm 插件
+
+`crates/spatiotemporal-wasm` 把这三个口子用上了：一个 WebAssembly 组件成为一等 fiber，跟原生组件受同一套规则约束。
+
+```rust
+// 宿主暴露它愿意让 guest 看见的能力，每一项都要写出投影。
+let mut caps = Capabilities::new();
+caps.expose::<Db, _>(|db| db.dsn());
+
+// 授予哪些能力由宿主的配置决定，不是 guest 报上来的。
+let plugin = WasmPlugin::open("plugins/tool-fs.wasm", Rc::new(caps), vec!["db".into()])?;
+let handle = ctx.use_component(Rc::new(plugin));
+```
+
+装上时 guest 的 `load` 跑一遍，`unload` 被登记成这个 fiber 的逆——于是它跟原生组件的逆排在同一个 LIFO 序列里，由同一套惯性状态机调度。`db` 的提供者被换掉，这个 wasm 插件自己会去激活再重新激活，跟原生组件的行为逐字相同。
+
+四个决定值得单独说：
+
+**能力由宿主授予，不由 guest 申请。** `granted` 来自配置，而不是去问 guest 要什么。这样 `inject` 属于配置的一部分、能被静态检视，不必先把 guest 跑起来才知道它要什么；也让它成为一个授权模型——第三方送来一个 `.wasm`，是运维决定它能看见什么。授予了一个宿主没暴露的名字就整体拒绝，绝不静默丢掉那一项。
+
+**能力在加载时刻取一次快照。** 这不是对动态性的妥协，恰好就是这套语义：论文里一个 fiber 的 committed view 在它整段活跃期内是固定的，依赖一变它就被重载。所以「装上时取一次」和「每次调用都去查」在可观察行为上没有差别。快照顺带挡掉了重入——store 里不放 `Context`，guest 就没法在自己的转换还没结束时回头调内核。这一条还是被类型系统逼出来的：`wasmtime_wasi` 的 `WasiView: Send`，而 `Rc` 不是 `Send`。
+
+**每一项能力都要宿主写出投影。** 跨 WIT 边界的值只能是 WIT 类型，而原生 coeffect 是 `Rc<dyn Trait>`。所以「guest 不能引入新的 coeffect 种类」这条限制，在代码里就落成了 `Capabilities` 那张投影表——表里没有的东西，guest 连名字都报不出来。
+
+**guest 的逆有燃料上限。** 论文承诺逆**会被调用**，可没承诺逆自己规矩。一个 `unload` 里死循环的 guest 会把整次卸载拖死，而卸载没有别的出路。用燃料而不是墙钟期限，是因为它不需要另起线程去推 epoch，而且确定性——同一个 guest 每次都在同一条指令上耗尽。`guests/runaway` 就是这么一个赖着不走的 guest，对应的测试能跑完本身就是结论。
+
+测试要真的 `.wasm` 产物：
+
+```bash
+cd crates/spatiotemporal-wasm
+./scripts/build-guests.sh          # 需要 rustup target add wasm32-wasip2
+cargo test -p spatiotemporal-wasm
+```
+
+产物不入库——预编译的二进制没法评审也没法复现。测试找不到它会直接失败并让你回来跑这个脚本，而不是静默跳过；跳过会得到一个「绿了但什么都没测」的测试。
+
 ## 与论文的对应
 
 | 论文 | 这里 |
@@ -167,7 +215,7 @@ let kernel = Kernel::new(Rc::new(spawner));      // App 是自带执行器的那
 
 ## 测试对着定理写
 
-`cargo test` 跑 54 个测试。核心库那部分每个都指向论文的一条性质：
+`cargo test` 跑 54 个（内核与配置层），`cargo test -p spatiotemporal-wasm` 另跑 7 个。核心库那部分每个都指向论文的一条性质：
 
 | 测试 | 论文 |
 |---|---|
@@ -202,6 +250,18 @@ let kernel = Kernel::new(Rc::new(spawner));      // App 是自带执行器的那
 
 `tests/dynamic.rs` 钉的是给动态基质留的那三个口子：运行时名字能一路带到 fiber 上、按字符串声明的依赖与 `KeyId::of` 声明的行为完全一致（包括提供者走了就去激活）、以及转换只在宿主真的驱动任务之后才推进。
 
+`crates/spatiotemporal-wasm/tests/wasm.rs` 钉的是跨语言边界之后这些性质还在：
+
+| 测试 | 钉的是 |
+|---|---|
+| `a_wasm_component_lives_and_dies_like_any_fiber` | guest 的 `unload` 就是这个 fiber 的逆 |
+| `the_name_comes_from_the_file` | 运行时名字的实际用处 |
+| `only_granted_capabilities_are_visible` | **能力边界不在 guest 的诚实程度上** |
+| `granting_an_unexposed_capability_is_refused` | 全有或全无，绝不静默降级 |
+| `a_wasm_plugin_waits_for_its_dependency` | 定义 26 那三种分类对 wasm 插件同样成立 |
+| `a_runaway_inverse_is_bounded` | **卡住的逆会被燃料抢占，卸载仍然完成** |
+| `the_adapter_reports_errors_as_component_failures` | wasm 侧的问题以组件失败出现，不是运行时崩溃 |
+
 ## 还没有做的
 
 这是 0.3，范围到论文 5.1 节加 5.2.1 节。以下都是明确的缺口，不是疏漏：
@@ -213,7 +273,8 @@ let kernel = Kernel::new(Rc::new(spawner));      // App 是自带执行器的那
 - **没有热模块替换**（5.2.2 节）。这在 Rust 里没有好答案，见论文 6.4 节：原生代码没有模块注册表，`dlopen`/`dlclose` 会撞上 `TypeId` 跨编译单元不一致、卸载时悬垂 vtable 等问题；wasm 组件模型更干净但要付序列化边界的代价。**注意这跟配置热重载是两件事**——后者已经在了，而且它才是长驻进程真正需要的那件（dsh 在两个发行形态里都把宿主端模块 HMR 关掉了，却给配置层补挂一个只看配置的 watcher）。
 - **没有服务代理**（6.2 节），因此没有负载均衡、滚动更新与跨进程调用。
 - **没有过程宏**，`inject` 仍是运行时声明。
-- **没有基质适配器。** 内核留了口子（见上一节），但 wasm、脚本、子进程的适配器不在这个 crate 里，也不该在——它们的依赖会盖掉这个 crate 现在的性质。三条不管适配器写在哪都不会变的限制：wasm 插件不能引入**新的** coeffect 种类给原生插件消费（`Rc<dyn Trait>` 的 trait 必须在宿主编译期存在），大 payload 的高频事件过边界要付序列化代价，以及 guest 的逆必须可抢占（否则一个卡住的 guest 会拖死整次卸载——这个适配器自己能做，在 `steps.step` 的闭包里拿 timeout 跟它赛跑）。
+- **wasm 适配器只到叶子插件。** `spatiotemporal-wasm` 是 0.0.1，能力面就是 `wit/plugin.wit` 里那个 world：一条日志、一次能力读取。guest 还不能提供 coeffect 给别人消费，也不能收事件。三条不管适配器怎么写都不会变的限制：guest 不能引入**新的** coeffect 种类给原生插件消费（`Rc<dyn Trait>` 的 trait 必须在宿主编译期存在，所以 world 决定了 guest 能提供什么，而不是 guest 自己决定），大 payload 的高频事件过边界要付序列化代价（叶子工具是甜点区，流式事件不是），以及 guest 的逆必须可抢占（已经用燃料做了）。
+- **脚本与子进程基质还没做。** QuickJS（模型现写的代码）和子进程（MCP 那类）各自需要一个 crate。子进程那个还需要宿主接一个带 IO 的执行器进来，因为内核本身不含任何 IO。
 
 ## 许可
 

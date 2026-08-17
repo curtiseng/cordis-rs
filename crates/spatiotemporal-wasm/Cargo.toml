@@ -1,0 +1,21 @@
+[package]
+name = "spatiotemporal-wasm"
+version = "0.0.1"
+description = "把 WebAssembly 组件接成时空可组合性演算里的一等 fiber"
+keywords = ["wasm", "wasmtime", "plugin", "component-model", "composability"]
+categories = ["wasm", "rust-patterns"]
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+# 刻意不继承 workspace 的 rust-version：内核声明 1.85，而 wasmtime 47 要 1.94。
+# 这个差距正是 default-members 只含内核的原因。
+rust-version = "1.94"
+
+[lints]
+workspace = true
+
+[dependencies]
+spatiotemporal.workspace = true
+futures.workspace = true
+wasmtime = "47.0.3"
+wasmtime-wasi = "47.0.3"

@@ -1,32 +1,50 @@
 [package]
-name = "cordis-rs"
+name = "spatiotemporal"
 version = "0.3.0"
-edition = "2024"
-rust-version = "1.85"
 description = "时空可组合性演算的 Rust 实现：可撤销 effect、响应式 coeffect、fiber 惯性生命周期、声明式配置层"
-repository = "https://github.com/curtiseng/cordis-rs"
-license = "MIT"
 keywords = ["plugin", "effects", "coeffects", "composability", "lifecycle"]
 categories = ["rust-patterns", "asynchronous"]
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+exclude = [".github/", ".idea/", ".gitignore"]
 
-[lib]
-# 包名跟仓库对齐，但对外的 crate 名是 cordis。
-name = "cordis"
+[workspace]
+members = ["crates/*"]
+# 平时只编内核。卫星 crate 的 MSRV 比内核高 9 个小版本（wasmtime 47 要 1.94），
+# 想读演算的人不该被迫编译一个 wasm 运行时。CI 里用 --workspace 全都编。
+default-members = ["."]
 
-[dependencies]
+[workspace.package]
+edition = "2024"
+rust-version = "1.85"
+repository = "https://github.com/curtiseng/cordis-rs"
+license = "MIT"
+
+[workspace.dependencies]
+spatiotemporal = { path = ".", version = "0.3" }
 futures = { version = "0.3.34", default-features = false, features = ["std", "executor"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
-serde_yaml_ng = "0.10.0"
-slotmap = "1.1.1"
 
-[lints.rust]
+[workspace.lints.rust]
 missing_debug_implementations = "allow"
 unsafe_code = "forbid"
+
+[lints]
+workspace = true
+
+[dependencies]
+futures.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml_ng = "0.10.0"
+slotmap = "1.1.1"
 
 [dev-dependencies]
 # 只有测试要 `join!` 来观察两轮对账的交错；库本身不需要 async-await，
 # 特性合并只发生在构建本包的测试目标时。
-futures = { version = "0.3.34", features = ["async-await"] }
+futures = { workspace = true, features = ["async-await"] }
 # 文件监听属于宿主而不是库：watch_config 示例演示怎么接。
 notify = "8.2.0"

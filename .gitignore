@@ -1,1 +1,6 @@
 /target
+.idea/
+# guest 编出来的 wasm 产物：由 scripts/build-guests.sh 生成，不入库。
+# 提交预编译的二进制没法评审，也没法复现。
+/crates/*/target
+/crates/*/guests/*/target

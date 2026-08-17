@@ -1,0 +1,19 @@
+[package]
+name = "probe"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# 自己就是一个 workspace 根。guest 编到 wasm32-wasip2，不该跟宿主共享
+# 依赖解析，也不该被 `cargo test` 顺手拖进来。
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.60.0"
+
+[profile.release]
+opt-level = "s"
+strip = true

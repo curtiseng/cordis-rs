@@ -4,8 +4,8 @@
 //! 按 id 定位的 patch。这一层完全是纯函数——把「算出期望状态」与「把期望状态施加
 //! 到活着的树上」分开，是能对配置做静态检查的前提。
 
-use cordis::{Entry, Error, Patch, compose, parse_entries, parse_patches};
 use serde_json::json;
+use spatiotemporal::{Entry, Error, Patch, compose, parse_entries, parse_patches};
 
 const BASE: &str = r#"
 - id: timer

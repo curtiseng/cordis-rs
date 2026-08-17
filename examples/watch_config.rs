@@ -21,12 +21,12 @@ use std::rc::Rc;
 use std::sync::mpsc::{Receiver, RecvTimeoutError, channel};
 use std::time::Duration;
 
-use cordis::{
+use futures::future::LocalBoxFuture;
+use notify::{RecursiveMode, Watcher};
+use spatiotemporal::{
     App, Component, Context, Key, KeyId, Loader, Registry, Result, State, Steps, Value, compose,
     parse_entries, parse_patches,
 };
-use futures::future::LocalBoxFuture;
-use notify::{RecursiveMode, Watcher};
 
 /* ------------------------------------------------------------------ */
 /* 几个假装是插件的组件                                                */

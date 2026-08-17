@@ -10,8 +10,8 @@
 
 use std::rc::Rc;
 
-use cordis::{App, Component, Context, Key, KeyId, Result, State, Steps};
 use futures::future::LocalBoxFuture;
+use spatiotemporal::{App, Component, Context, Key, KeyId, Result, State, Steps};
 
 /// 一项能力：存储。
 trait Storage {

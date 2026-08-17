@@ -8,7 +8,7 @@ mod common;
 use std::rc::Rc;
 
 use common::{Log, Probe, Service, Tagged};
-use cordis::{App, Key, KeyId, State};
+use spatiotemporal::{App, Key, KeyId, State};
 
 enum Db {}
 impl Key for Db {
@@ -35,7 +35,7 @@ fn assemble(order: [usize; 3]) -> Outcome {
     let mut app = App::new();
     let root = app.root();
 
-    let make = |index: usize| -> Rc<dyn cordis::Component> {
+    let make = |index: usize| -> Rc<dyn spatiotemporal::Component> {
         let log = log.clone();
         match index {
             0 => Probe::new("p", move |ctx, _steps| {
@@ -64,7 +64,7 @@ fn assemble(order: [usize; 3]) -> Outcome {
     };
 
     // 三个句柄按组件编号归位，这样不同装配顺序下的断言仍可比较。
-    let mut handles: Vec<Option<cordis::FiberHandle>> = vec![None, None, None];
+    let mut handles: Vec<Option<spatiotemporal::FiberHandle>> = vec![None, None, None];
     for index in order {
         handles[index] = Some(root.use_component(make(index)));
         // 每插一行就推进到静止，模拟「一次加一个插件」；
