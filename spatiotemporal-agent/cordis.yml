@@ -1,5 +1,21 @@
 # 基础组合。每一行是一项能力，跟 dsh 的 cordis.yml 同形。
-# 换实现：关掉旧行再 insert 新行（见 cordis.smoke.yml）。
+# 换实现：关掉旧行再 insert 新行（见 cordis.smoke.yml / cordis.creation.yml）。
+
+- id: fs-sandbox
+  name: fs-sandbox
+  config:
+    root: .
+
+- id: tool-fs
+  name: tool-fs
+
+- id: bash-sandbox
+  name: bash-sandbox
+  config:
+    root: .
+
+- id: tool-bash
+  name: tool-bash
 
 - id: doc
   name: doc

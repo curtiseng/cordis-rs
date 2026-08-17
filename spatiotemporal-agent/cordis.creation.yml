@@ -1,0 +1,13 @@
+# 创造模式：叠在标准组合之上。
+# 启动：cargo run -p spatiotemporal-agent -- --creation
+
+- id: ui
+  config:
+    port: 8787
+    creation: true
+
+- insert:
+    - id: creation
+      name: creation-tools
+      config:
+        enabled: true

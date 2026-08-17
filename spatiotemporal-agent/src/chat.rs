@@ -2,6 +2,8 @@ use serde_json::{Value, json};
 
 use crate::host::{Llm, Toolbox};
 
+const MAX_TOOL_ROUNDS: usize = 12;
+
 #[derive(Clone, serde::Serialize)]
 pub struct Trace {
     pub tool: String,
@@ -14,16 +16,34 @@ pub struct Trace {
 pub struct Turn {
     pub reply: String,
     pub traces: Vec<Trace>,
+    /// 不含 system 的完整会话（含 tool 消息），供下一轮传入。
+    pub history: Vec<Value>,
 }
 
-pub fn run(llm: &dyn Llm, tools: &Toolbox, doc_path: &str, user: &str, history: &[Value]) -> Turn {
+pub struct ChatConfig<'a> {
+    pub llm: &'a dyn Llm,
+    pub tools: &'a Toolbox,
+    pub workspace: &'a str,
+    pub doc_path: Option<&'a str>,
+    pub creation: bool,
+    pub user: &'a str,
+    pub history: &'a [Value],
+}
+
+pub fn run(config: ChatConfig<'_>) -> Turn {
+    let ChatConfig {
+        llm,
+        tools,
+        workspace,
+        doc_path,
+        creation,
+        user,
+        history,
+    } = config;
+
     let mut messages = vec![json!({
         "role": "system",
-        "content": format!(
-            "你是这篇 Markdown 文档的讲解员。文档路径：{doc_path}。\n\
-             先用工具看文档再回答：read_doc 读正文，outline 看结构，cite 按关键词引用原文。\n\
-             回答用中文，引用时尽量附上原文片段。不要编造文档里没有的内容。"
-        )
+        "content": system_prompt(workspace, doc_path, creation, tools),
     })];
     messages.extend(history.iter().cloned());
     messages.push(json!({"role": "user", "content": user}));
@@ -31,7 +51,7 @@ pub fn run(llm: &dyn Llm, tools: &Toolbox, doc_path: &str, user: &str, history: 
     let schemas = tools.schemas();
     let mut traces = Vec::new();
 
-    for _ in 0..6 {
+    for _ in 0..MAX_TOOL_ROUNDS {
         let mut body = json!({
             "model": llm.model(),
             "messages": messages,
@@ -44,10 +64,7 @@ pub fn run(llm: &dyn Llm, tools: &Toolbox, doc_path: &str, user: &str, history: 
         let response = match llm.complete(body) {
             Ok(value) => value,
             Err(error) => {
-                return Turn {
-                    reply: error.to_string(),
-                    traces,
-                };
+                return finish(messages, error.to_string(), traces);
             }
         };
 
@@ -92,11 +109,47 @@ pub fn run(llm: &dyn Llm, tools: &Toolbox, doc_path: &str, user: &str, history: 
             .as_str()
             .unwrap_or("（模型没有返回文本）")
             .to_owned();
-        return Turn { reply, traces };
+        messages.push(message);
+        return finish(messages, reply, traces);
     }
 
+    finish(messages, "工具调用轮次用尽了。".into(), traces)
+}
+
+fn finish(messages: Vec<Value>, reply: String, traces: Vec<Trace>) -> Turn {
+    let history = messages.into_iter().skip(1).collect();
     Turn {
-        reply: "工具调用轮次用尽了。".into(),
+        reply,
         traces,
+        history,
     }
+}
+
+fn system_prompt(workspace: &str, doc_path: Option<&str>, creation: bool, tools: &Toolbox) -> String {
+    let names: Vec<_> = tools.list().into_iter().map(|t| t.name).collect();
+    let mut prompt = format!(
+        "你是 spatiotemporal agent，运行在一个可组合插件宿主上。\n\
+         工作区根目录：{workspace}\n\
+         当前可用工具：{}\n",
+        names.join(", ")
+    );
+    if let Some(doc_path) = doc_path {
+        prompt.push_str(&format!(
+            "当前文档：{doc_path}。可用 read_doc / outline / cite 阅读。\n"
+        ));
+    }
+    prompt.push_str(
+        "文件操作用 read / write / edit（JSON：path；write 还需 content；edit 还需 old、new）；\
+         shell 用 bash（JSON：command，可选 cwd）。\
+         所有工具参数必须是合法 JSON 对象，字段名与 schema 一致。\n\
+         回答用中文，引用时尽量附上原文或命令输出。不要编造没有依据的内容。\n",
+    );
+    if creation {
+        prompt.push_str(
+            "【创造模式】可用 inspect_plugins / inspect_tools / inspect_config 查看运行时；\
+             define_script 只会提交安装请求，必须等用户在浏览器点击「批准」后才会热装；\
+             undefine_plugin 禁用；save_patch 持久化。\n",
+        );
+    }
+    prompt
 }

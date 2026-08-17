@@ -1,11 +1,21 @@
+mod bash_sandbox;
+mod creation;
 mod deepseek;
 mod doc;
+mod fs_sandbox;
 mod probe;
 mod read_doc;
+mod tool_bash;
+mod tool_fs;
 mod web;
 
+pub use bash_sandbox::BashSandbox;
+pub use creation::CreationTools;
 pub use deepseek::DeepSeek;
 pub use doc::DocFile;
+pub use fs_sandbox::FsSandbox;
 pub use probe::Probe;
 pub use read_doc::ReadDoc;
+pub use tool_bash::ToolBash;
+pub use tool_fs::ToolFs;
 pub use web::Web;

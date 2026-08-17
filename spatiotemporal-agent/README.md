@@ -54,7 +54,15 @@ export DEEPSEEK_API_KEY=sk-你的key
 cargo run -p spatiotemporal-agent
 ```
 
+**创造模式**（可检视运行时、热装脚本插件）：
+
+```bash
+cargo run -p spatiotemporal-agent -- --creation
+```
+
 看到 `打开 http://127.0.0.1:8787` 后，用浏览器打开。默认读 `assets/sample.md`。可以问「这篇在讲什么可撤销 effect？」，模型应先调 `outline` / `cite` / `read_doc` 再回答；左侧能看到每个工具来自 native / wasm / script 哪一种基质。
+
+多轮对话会保留 tool 消息，模型能记住之前调用了哪些工具。
 
 换一篇自己的文档（路径相对当前工作目录）：
 
@@ -78,12 +86,19 @@ cargo run -p spatiotemporal-agent -- --smoke
 
 | id | name | 基质 | 提供 |
 |---|---|---|---|
+| `fs-sandbox` | `fs-sandbox` | native | `fs` 工作区沙箱 |
+| `tool-fs` | `tool-fs` | native | 工具 `read` / `write` / `edit` |
+| `bash-sandbox` | `bash-sandbox` | native | `shell` 工作区沙箱 |
+| `tool-bash` | `tool-bash` | native | 工具 `bash` |
 | `doc` | `doc` | native | `markdown` 能力 |
 | `read-doc` | `read-doc` | native | 工具 `read_doc` |
 | `outline` | `wasm` | wasm | 工具 `outline` |
 | `cite` | `script` | script | 工具 `cite` |
 | `llm` | `deepseek` | native | `llm`（HTTP，不进 wasm） |
 | `ui` | `web` | native | `surface`（听端口） |
+| `creation` | `creation-tools` | native | 创造模式元工具（`--creation` 时启用） |
+
+创造模式额外提供：`inspect_plugins` / `inspect_tools` / `inspect_config` / `define_script` / `undefine_plugin` / `save_patch`。
 
 wasm / script 适合叶子工具：调用稀疏、payload 小、能力面由 WIT / `host.*` 钉死。LLM 适配器和听端口的界面留在 native——前者每次要搬整份对话且需要 HTTP，后者 WASI 里没有「绑 8787」。
 

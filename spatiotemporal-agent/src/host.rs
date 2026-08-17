@@ -4,9 +4,11 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use futures::future::LocalBoxFuture;
+use serde_json::Value;
 use spatiotemporal::{Component, Context, KeyId, Result, Steps};
 
 use crate::keys::LlmKey;
+use crate::tool_schema;
 
 type Invoke = Rc<dyn Fn(&str) -> Result<String>>;
 
@@ -20,6 +22,16 @@ pub trait Document {
 pub trait Llm {
     fn model(&self) -> String;
     fn complete(&self, body: serde_json::Value) -> Result<serde_json::Value>;
+}
+
+/// 工作区文件系统（路径限制在 root 内）。
+pub trait Fs {
+    fn root(&self) -> &Path;
+}
+
+/// Shell 执行（cwd 限制在 root 内）。
+pub trait Shell {
+    fn root(&self) -> &Path;
 }
 
 /// 界面。`apply` 只把实现挂到 `surface` 上；真正跑起来是宿主 `run` 的事。
@@ -132,6 +144,7 @@ pub struct Toolbox {
 struct Registered {
     description: String,
     substrate: String,
+    parameters: Value,
     invoke: Invoke,
 }
 
@@ -143,11 +156,23 @@ impl Toolbox {
     }
 
     pub fn insert(&self, name: String, description: String, substrate: &str, invoke: Invoke) {
+        self.insert_with_schema(name, description, substrate, tool_schema::text_query("工具输入"), invoke);
+    }
+
+    pub fn insert_with_schema(
+        &self,
+        name: String,
+        description: String,
+        substrate: &str,
+        parameters: Value,
+        invoke: Invoke,
+    ) {
         self.inner.borrow_mut().insert(
             name,
             Registered {
                 description,
                 substrate: substrate.to_owned(),
+                parameters,
                 invoke,
             },
         );
@@ -179,23 +204,16 @@ impl Toolbox {
             .collect()
     }
 
-    pub fn schemas(&self) -> Vec<serde_json::Value> {
-        self.list()
-            .into_iter()
-            .map(|tool| {
-                serde_json::json!({
-                    "type": "function",
-                    "function": {
-                        "name": tool.name,
-                        "description": format!("[{}] {}", tool.substrate, tool.description),
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "input": { "type": "string", "description": "工具的输入，可为空" }
-                            }
-                        }
-                    }
-                })
+    pub fn schemas(&self) -> Vec<Value> {
+        self.inner
+            .borrow()
+            .iter()
+            .map(|(name, tool)| {
+                tool_schema::function_schema(
+                    name,
+                    &format!("[{}] {}", tool.substrate, tool.description),
+                    tool.parameters.clone(),
+                )
             })
             .collect()
     }

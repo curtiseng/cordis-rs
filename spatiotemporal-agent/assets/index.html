@@ -143,6 +143,38 @@
       font-size: 11px;
     }
     .status.warn { color: var(--script); }
+    .approval {
+      margin-top: 12px;
+      padding: 12px 14px;
+      border: 1px solid var(--script);
+      background: rgba(224, 122, 95, 0.08);
+    }
+    .approval .title {
+      font-family: "IBM Plex Mono", ui-monospace, monospace;
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--script);
+      margin: 0 0 8px;
+    }
+    .approval pre {
+      margin: 0 0 10px;
+      font: 11px/1.45 "IBM Plex Mono", ui-monospace, monospace;
+      color: var(--muted);
+      white-space: pre-wrap;
+      max-height: 120px;
+      overflow: auto;
+    }
+    .approval .actions {
+      display: flex;
+      gap: 8px;
+    }
+    .approval button.reject {
+      background: transparent;
+      color: var(--script);
+      border: 1px solid var(--script);
+    }
+    .approval[hidden] { display: none; }
     #log { padding: 20px 28px 12px; }
     .empty {
       color: var(--muted);
@@ -255,6 +287,15 @@
       <p class="eyebrow">session</p>
       <div class="bus" id="bus"></div>
       <div class="status" id="model"></div>
+      <div class="approval" id="approval" hidden>
+        <p class="title">待审批脚本安装</p>
+        <div id="approval-meta"></div>
+        <pre id="approval-preview"></pre>
+        <div class="actions">
+          <button type="button" id="approve-btn">批准</button>
+          <button type="button" class="reject" id="reject-btn">拒绝</button>
+        </div>
+      </div>
     </div>
     <div class="scroll" id="log">
       <div class="empty" id="empty">
@@ -290,13 +331,52 @@
       return div;
     }
 
-    async function boot() {
+    async function refreshStatus() {
       const status = await (await fetch("/api/status")).json();
       const ready = status.has_key;
+      const workspace = status.workspace || "";
       $("#model").textContent = ready
-        ? status.model
-        : status.model + " · 缺少 DEEPSEEK_API_KEY";
+        ? `${status.model} · ${workspace}`
+        : `${status.model} · 缺少 DEEPSEEK_API_KEY · ${workspace}`;
       $("#model").classList.toggle("warn", !ready);
+      renderPending(status.pending);
+      return status;
+    }
+
+    function renderPending(pending) {
+      const panel = $("#approval");
+      if (!pending) {
+        panel.hidden = true;
+        return;
+      }
+      panel.hidden = false;
+      $("#approval-meta").textContent =
+        `${pending.id} → ${pending.file} · ${pending.role} · ${pending.source_lines} 行`;
+      $("#approval-preview").textContent = pending.preview || "";
+    }
+
+    async function decide(approve) {
+      const res = await fetch("/api/creation/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ approve }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        add("系统", data.error || "审批失败", "err");
+        return;
+      }
+      add("系统", data.message || (approve ? "已批准" : "已拒绝"));
+      await refreshStatus();
+      const status = await (await fetch("/api/status")).json();
+      $("#plugins").replaceChildren();
+      $("#tools").replaceChildren();
+      (status.plugins || []).forEach((p) => $("#plugins").appendChild(card(p, p.role)));
+      (status.tools || []).forEach((t) => $("#tools").appendChild(card(t)));
+    }
+
+    async function boot() {
+      const status = await refreshStatus();
       (status.plugins || []).forEach((p) => $("#plugins").appendChild(card(p, p.role)));
       (status.tools || []).forEach((t) => $("#tools").appendChild(card(t)));
       const bus = $("#bus");
@@ -372,8 +452,14 @@
         } else {
           add("讲解员", turn.reply || turn.error || "没有回复");
         }
-        history.push({ role: "user", content: text });
-        history.push({ role: "assistant", content: turn.reply || "" });
+        if (Array.isArray(turn.history)) {
+          history.length = 0;
+          history.push(...turn.history);
+        } else {
+          history.push({ role: "user", content: text });
+          history.push({ role: "assistant", content: turn.reply || "" });
+        }
+        await refreshStatus();
       } catch (err) {
         wait.remove();
         add("系统", String(err), "err");
@@ -381,6 +467,9 @@
       btn.disabled = false;
       input.focus();
     });
+
+    $("#approve-btn").addEventListener("click", () => decide(true));
+    $("#reject-btn").addEventListener("click", () => decide(false));
 
     boot();
   </script>

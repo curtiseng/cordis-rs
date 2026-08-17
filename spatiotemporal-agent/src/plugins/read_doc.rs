@@ -5,6 +5,7 @@ use spatiotemporal::{Component, Context, KeyId, Result, Steps};
 
 use crate::host::Toolbox;
 use crate::keys::Doc;
+use crate::tool_schema;
 
 /// 本地插件：把「读全文」登记成工具。
 pub struct ReadDoc {
@@ -37,10 +38,11 @@ impl Component for ReadDoc {
                     Ok(text.clone())
                 }
             });
-            tools.insert(
+            tools.insert_with_schema(
                 "read_doc".into(),
                 "读取当前 Markdown 文档的正文".into(),
                 "native",
+                tool_schema::empty_object(),
                 invoke,
             );
             let tools = tools.clone();

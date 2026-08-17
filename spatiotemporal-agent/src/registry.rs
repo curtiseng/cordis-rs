@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::fs;
 use std::rc::Rc;
 
@@ -5,20 +6,27 @@ use spatiotemporal::{Component, Error, Registry, Value};
 use spatiotemporal_script::ScriptPlugin;
 use spatiotemporal_wasm::WasmPlugin;
 
+use crate::approval::ApprovalQueue;
 use crate::host::{
     Announcing, LlmInstaller, Roster, Toolbox, config_str, grant_list, resolve_path, script_caps,
     wasm_caps, wasm_guest,
 };
-use crate::plugins::{DeepSeek, DocFile, Probe, ReadDoc, Web};
+use crate::plugins::{
+    BashSandbox, CreationTools, DeepSeek, DocFile, FsSandbox, Probe, ReadDoc, ToolBash, ToolFs,
+    Web,
+};
+use crate::runtime::AgentRuntime;
 
 #[derive(Clone)]
 pub struct Host {
     pub tools: Toolbox,
     pub roster: Roster,
+    pub approvals: ApprovalQueue,
     pub wasm_caps: Rc<spatiotemporal_wasm::Capabilities>,
     pub script_caps: Rc<spatiotemporal_script::Capabilities>,
     pub llm_wasm: Rc<dyn spatiotemporal_wasm::LlmHost>,
     pub llm_script: Rc<dyn spatiotemporal_script::LlmHost>,
+    pub runtime: Rc<RefCell<Option<Rc<AgentRuntime>>>>,
 }
 
 impl Host {
@@ -27,16 +35,70 @@ impl Host {
         Host {
             tools: Toolbox::new(),
             roster: Roster::new(),
+            approvals: ApprovalQueue::new(),
             wasm_caps: wasm_caps(),
             script_caps: script_caps(),
             llm_wasm: installer.clone() as Rc<dyn spatiotemporal_wasm::LlmHost>,
             llm_script: installer as Rc<dyn spatiotemporal_script::LlmHost>,
+            runtime: Rc::new(RefCell::new(None)),
         }
     }
 }
 
 pub fn registry(host: Host) -> Registry {
     let mut registry = Registry::new();
+
+    {
+        let host = host.clone();
+        registry.add("fs-sandbox", move |config: &Value| {
+            Ok(announce(
+                Rc::new(FsSandbox::from_config(config)),
+                host.roster.clone(),
+                "native",
+                "提供 fs（工作区沙箱）",
+            ))
+        });
+    }
+
+    {
+        let host = host.clone();
+        registry.add("tool-fs", move |_config: &Value| {
+            Ok(announce(
+                Rc::new(ToolFs {
+                    tools: host.tools.clone(),
+                }),
+                host.roster.clone(),
+                "native",
+                "登记 read / write / edit",
+            ))
+        });
+    }
+
+    {
+        let host = host.clone();
+        registry.add("bash-sandbox", move |config: &Value| {
+            Ok(announce(
+                Rc::new(BashSandbox::from_config(config)),
+                host.roster.clone(),
+                "native",
+                "提供 shell（工作区沙箱）",
+            ))
+        });
+    }
+
+    {
+        let host = host.clone();
+        registry.add("tool-bash", move |_config: &Value| {
+            Ok(announce(
+                Rc::new(ToolBash {
+                    tools: host.tools.clone(),
+                }),
+                host.roster.clone(),
+                "native",
+                "登记 bash 工具",
+            ))
+        });
+    }
 
     {
         let host = host.clone();
@@ -84,6 +146,11 @@ pub fn registry(host: Host) -> Registry {
     {
         let host = host.clone();
         registry.add("web", move |config: &Value| {
+            let runtime = host
+                .runtime
+                .borrow()
+                .clone()
+                .ok_or_else(|| Error::Config("web 需要 AgentRuntime".into()))?;
             let port = config
                 .get("port")
                 .and_then(Value::as_u64)
@@ -94,15 +161,26 @@ pub fn registry(host: Host) -> Registry {
                         .and_then(|port| port.parse().ok())
                 })
                 .unwrap_or(8787);
+            let creation = config
+                .get("creation")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
             Ok(announce(
                 Rc::new(Web {
                     port,
                     tools: host.tools.clone(),
                     roster: host.roster.clone(),
+                    creation,
+                    approvals: host.approvals.clone(),
+                    runtime,
                 }),
                 host.roster.clone(),
                 "native",
-                "浏览器界面",
+                if creation {
+                    "浏览器界面（创造模式）"
+                } else {
+                    "浏览器界面"
+                },
             ))
         });
     }
@@ -118,6 +196,29 @@ pub fn registry(host: Host) -> Registry {
                 host.roster.clone(),
                 "native",
                 "命令行探测界面",
+            ))
+        });
+    }
+
+    {
+        let host = host.clone();
+        registry.add("creation-tools", move |config: &Value| {
+            let runtime = host
+                .runtime
+                .borrow()
+                .clone()
+                .ok_or_else(|| Error::Config("creation-tools 需要 AgentRuntime".into()))?;
+            Ok(announce(
+                Rc::new(CreationTools::from_config(
+                    config,
+                    host.tools.clone(),
+                    host.roster.clone(),
+                    runtime,
+                    host.approvals.clone(),
+                )),
+                host.roster.clone(),
+                "native",
+                "创造模式元工具",
             ))
         });
     }
