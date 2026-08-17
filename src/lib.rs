@@ -120,6 +120,20 @@
 //! 文件监听刻意留在库外面——它属于宿主的职责。`cargo run --example watch_config`
 //! 有一个用 `notify` 接上的完整演示，包括「写坏配置不会杀死运行中的树」。
 //!
+//! # 给动态基质留的三个口子
+//!
+//! 原生组件全是编译期的：名字是字面量，依赖写成 `KeyId::of::<K>()`，执行器用库
+//! 自带的那个。一个 wasm 组件、一段模型现写的代码、一个子进程都不是。内核为此
+//! 让出三处，**但基质本身不是内核概念**——它们都只是 [`Component`] 的不同实现，
+//! 由 [`Registry`] 里的构造器装出来，所以适配器属于独立的 crate。
+//!
+//! - [`Component::name`] 返回 `&str` 而非 `&'static str`：名字可以来自 wasm 文件
+//!   或运行时拼出来。
+//! - [`KeyRegistry`] 把名字翻成 [`KeyId`]：guest 只能用字符串说「我需要 tools」，
+//!   而这张表由宿主建立，所以 **guest 说不出宿主没登记的能力**。
+//! - [`Spawn`] 与 [`Kernel`]：宿主可以带自己的执行器。内核本身不含任何 IO，要让
+//!   子进程或套接字成为一等 fiber，就得把带 IO 的执行器接进来。
+//!
 //! # 与论文的对应
 //!
 //! | 论文 | 这里 |
@@ -135,6 +149,7 @@
 //! | `fiber.inertia` | `Shared` future |
 //! | **O-Insert** / **O-Retire** | [`Context::use_component`] / [`FiberHandle::dispose`] |
 //! | 5.2.1 节的组件加载器 | [`Loader`]、[`Registry`]、[`compose`] |
+//! | 注 2 的 `create_task` | [`Spawn`]、[`Kernel`]（宿主可自带执行器） |
 //!
 //! 详细的取舍与尚未实现的部分见仓库 README。
 //!
@@ -157,10 +172,10 @@ pub use effect::{EffectHandle, Inverse, Steps};
 pub use entry::{Composed, Entry, Patch, compose, parse_entries, parse_patches};
 pub use error::{Error, Result};
 pub use fiber::State;
-pub use key::{Key, KeyId, RealmId};
+pub use key::{Key, KeyId, KeyRegistry, RealmId};
 pub use loader::{Applied, Loader};
 pub use registry::{Factory, Registry};
-pub use runtime::App;
+pub use runtime::{App, Kernel, Spawn};
 
 /// 重新导出：配置值的类型出现在 [`Entry::config`] 与 [`Factory`] 的签名里，
 /// 调用方不该为了写一行配置去猜该配哪个版本的 serde_json。

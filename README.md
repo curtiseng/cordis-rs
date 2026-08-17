@@ -89,6 +89,42 @@ crate 名是 `cordis`（包名跟仓库对齐）。完整的最小例子见 `src
 
 **注册表必须显式建立。** Rust 没有运行时模块注册表（论文 6.4 节把这条列为原生语言的固有差异），所以 `name → 构造器` 这张表要手写。交换条件是：加一个新组件要动宿主一行代码并重新编译，但**已注册组件的开关、重配、插入、移除全都不需要重启**——而那正是配置热重载所要的全部。
 
+## 给动态基质留的三个口子
+
+原生组件全是编译期的：名字是字面量，依赖写成 `KeyId::of::<K>()`，执行器用库自带的那个。一个 wasm 组件、一段模型现写的代码、一个子进程都不是。
+
+要紧的是**基质不需要是内核概念**。`Registry` 已经是 `name → 构造器`，wasm、script、remote 插件都只是 `Component` 的不同实现——各自的 `apply` 去调 wasmtime、QuickJS 或子进程，把注册动作用 `steps.step` 登记逆。所以适配器属于独立的 crate（wasmtime 一家就带上百个依赖，而这个 crate 现在只有四个），内核只让出三处：
+
+**名字可以是运行时的。** `Component::name()` 返回 `&str` 而不是 `&'static str`。静态名字照常写字面量，动态的可以来自 wasm 文件名或直接拼出来。
+
+**依赖可以用字符串声明。** `KeyId` 的同一性依据是 `TypeId`，运行时凭字符串构造不出来，所以有一张 `KeyRegistry` 做翻译：
+
+```rust
+let mut keys = KeyRegistry::new();
+keys.add::<Tools>().add::<Shell>();
+
+// guest 的 WIT 导入报上来的字符串，在这里变成能填进 inject 的键
+let declared = keys.resolve_all(&["tools", "shell"])?;
+```
+
+这张表跟 `Registry` 是一对：那张说「哪些组件可以被装上」，这张说「哪些能力可以被按名字声明」。两张都由宿主显式建立，于是**guest 说不出宿主没登记的键**——能力面的边界就在这里，而不在 guest 的诚实程度上。同名不同键会 panic，因为静默顶掉前一个等于让一个 guest 拿到别人的能力。
+
+**执行器可以是宿主自己的。** 论文注 2 说任务创建是宿主的职责，现在它是一个可注入的 `Spawn`。内核本身不含任何 IO，要让子进程或套接字成为一等 fiber，就得把带 IO 的执行器接进来：
+
+```rust
+struct LocalSetSpawner(tokio::task::LocalSet);   // 示意
+
+impl Spawn for LocalSetSpawner {
+    fn spawn(&self, task: LocalBoxFuture<'static, ()>) {
+        self.0.spawn_local(task);
+    }
+}
+
+let kernel = Kernel::new(Rc::new(spawner));      // App 是自带执行器的那个便利壳
+```
+
+一处值得知道的实现细节：`inertia` 是 `Shared`，谁 await 谁承担 poll，所以 `quiesce()` 会把它等的那次转换就地驱动完，不依赖宿主执行器是否勤快。丢弃任务的实际后果是「没有任何依赖方去等的转换会一直停在飞行中」，而不是死锁。
+
 ## 与论文的对应
 
 | 论文 | 这里 |
@@ -107,6 +143,7 @@ crate 名是 `cordis`（包名跟仓库对齐）。完整的最小例子见 `src
 | **O-Insert** / **O-Retire** / **O-Remove** | `use_component` / `FiberHandle::dispose` / 卸载完成后移出竞技场 |
 | **L-Leave** 与 **L-Unload** 上的守卫 | `refresh` 先标记 `Unloading`，`unload` 先排空依赖方 |
 | 5.2.1 节的组件加载器 | `Loader`、`Registry`、`compose` |
+| 注 2 的 `create_task` | `Spawn`、`Kernel`（宿主可自带执行器） |
 
 ## Rust 里的七个设计决定
 
@@ -130,7 +167,7 @@ crate 名是 `cordis`（包名跟仓库对齐）。完整的最小例子见 `src
 
 ## 测试对着定理写
 
-`cargo test` 跑 45 个测试。核心库那部分每个都指向论文的一条性质：
+`cargo test` 跑 54 个测试。核心库那部分每个都指向论文的一条性质：
 
 | 测试 | 论文 |
 |---|---|
@@ -163,9 +200,11 @@ crate 名是 `cordis`（包名跟仓库对齐）。完整的最小例子见 `src
 | `concurrent_applies_are_serialized_and_coalesced` | 串行化是正确性要求 |
 | `a_name_in_a_patch_is_an_assertion_not_an_assignment` | patch 的 `name` 是断言 |
 
+`tests/dynamic.rs` 钉的是给动态基质留的那三个口子：运行时名字能一路带到 fiber 上、按字符串声明的依赖与 `KeyId::of` 声明的行为完全一致（包括提供者走了就去激活）、以及转换只在宿主真的驱动任务之后才推进。
+
 ## 还没有做的
 
-这是 0.2，范围到论文 5.1 节加 5.2.1 节。以下都是明确的缺口，不是疏漏：
+这是 0.3，范围到论文 5.1 节加 5.2.1 节。以下都是明确的缺口，不是疏漏：
 
 - **单线程。** `Rc` + `RefCell` + `LocalPool`。多线程版本要把所有 disposer 与 apply 的返回 future 加上 `Send + 'static`，组件作者会明显感到约束。
 - **`Context::effect` 在调用点跑到完成**，不作为并发任务。所以「飞行中的 effect 被 dispose 中止」这一支没实现；组件层（`apply`）的守卫与部分回滚是完整的。
@@ -174,6 +213,7 @@ crate 名是 `cordis`（包名跟仓库对齐）。完整的最小例子见 `src
 - **没有热模块替换**（5.2.2 节）。这在 Rust 里没有好答案，见论文 6.4 节：原生代码没有模块注册表，`dlopen`/`dlclose` 会撞上 `TypeId` 跨编译单元不一致、卸载时悬垂 vtable 等问题；wasm 组件模型更干净但要付序列化边界的代价。**注意这跟配置热重载是两件事**——后者已经在了，而且它才是长驻进程真正需要的那件（dsh 在两个发行形态里都把宿主端模块 HMR 关掉了，却给配置层补挂一个只看配置的 watcher）。
 - **没有服务代理**（6.2 节），因此没有负载均衡、滚动更新与跨进程调用。
 - **没有过程宏**，`inject` 仍是运行时声明。
+- **没有基质适配器。** 内核留了口子（见上一节），但 wasm、脚本、子进程的适配器不在这个 crate 里，也不该在——它们的依赖会盖掉这个 crate 现在的性质。三条不管适配器写在哪都不会变的限制：wasm 插件不能引入**新的** coeffect 种类给原生插件消费（`Rc<dyn Trait>` 的 trait 必须在宿主编译期存在），大 payload 的高频事件过边界要付序列化代价，以及 guest 的逆必须可抢占（否则一个卡住的 guest 会拖死整次卸载——这个适配器自己能做，在 `steps.step` 的闭包里拿 timeout 跟它赛跑）。
 
 ## 许可
 

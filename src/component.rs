@@ -13,7 +13,11 @@ use crate::key::{Key, KeyId};
 /// （[`Component::inject`]）与 effect 函数 $e$（[`Component::apply`]）配对。
 /// 配置住在组件值自己身上——Rust 里没必要像 TypeScript 那样把 config 单独套进去。
 pub trait Component: 'static {
-    fn name(&self) -> &'static str;
+    /// 诊断用的名字。
+    ///
+    /// 刻意**不是** `&'static str`：一个 wasm 组件的名字来自它的文件，一段模型
+    /// 现写的代码根本没有编译期名字。静态名字照常可以直接返回字面量。
+    fn name(&self) -> &str;
 
     /// coeffect 规格：这个组件需要哪些键才能被激活。
     fn inject(&self) -> Vec<KeyId> {
@@ -38,7 +42,7 @@ pub trait Component: 'static {
 /// assert_eq!(handle.state(), State::Active);
 /// ```
 pub struct FnComponent<F> {
-    name: &'static str,
+    name: String,
     inject: Vec<KeyId>,
     apply: F,
 }
@@ -47,7 +51,8 @@ impl<F> FnComponent<F>
 where
     F: Fn(Context, Steps) -> LocalBoxFuture<'static, Result<()>> + 'static,
 {
-    pub fn new(name: &'static str, apply: F) -> Self {
+    pub fn new(name: impl Into<String>, apply: F) -> Self {
+        let name = name.into();
         FnComponent {
             name,
             inject: Vec::new(),
@@ -66,8 +71,8 @@ impl<F> Component for FnComponent<F>
 where
     F: Fn(Context, Steps) -> LocalBoxFuture<'static, Result<()>> + 'static,
 {
-    fn name(&self) -> &'static str {
-        self.name
+    fn name(&self) -> &str {
+        &self.name
     }
 
     fn inject(&self) -> Vec<KeyId> {

@@ -43,7 +43,9 @@ impl State {
 pub(crate) type CommittedEntry = (FiberKey, RealmId);
 
 pub(crate) struct Fiber {
-    pub name: &'static str,
+    /// 诊断用的名字。`Rc<str>` 而不是 `&'static str`：动态基质（wasm 文件、模型
+    /// 现写的一段代码）的名字只有运行时才知道。
+    pub name: Rc<str>,
     pub parent: Option<FiberKey>,
     /// 组件的 coeffect 规格 $d$。
     pub inject: Vec<KeyId>,

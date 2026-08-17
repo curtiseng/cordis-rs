@@ -26,6 +26,10 @@ pub enum Error {
     /// Rust 没有运行时模块注册表（论文 6.4 节），所以「装不上」在这里是一个
     /// 同步的、发生在任何 fiber 被改动**之前**的错误。
     Unknown(String),
+    /// 按名字声明了一项宿主没有登记的能力。
+    ///
+    /// 只有动态基质会碰到：原生组件直接写 `KeyId::of::<K>()`，编译期就错不了。
+    UnknownKey(String),
     /// 配置本身不合法：解析失败，或不符合组件的期望形状。
     Config(String),
     /// 对账失败后，回滚也失败了。
@@ -54,6 +58,7 @@ impl fmt::Display for Error {
             Error::Inactive(name) => write!(f, "依赖当前未被提供：{name}"),
             Error::Component(message) => write!(f, "{message}"),
             Error::Unknown(name) => write!(f, "注册表里没有这个组件：{name}"),
+            Error::UnknownKey(name) => write!(f, "没有登记这个能力键：{name}"),
             Error::Config(message) => write!(f, "配置不合法：{message}"),
             Error::Rollback(messages) => {
                 write!(f, "对账失败后回滚也失败了：{}", messages.join("；"))

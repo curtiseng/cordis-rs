@@ -224,7 +224,7 @@ impl FiberHandle {
         self.rt.state_of(self.key)
     }
 
-    pub fn name(&self) -> &'static str {
+    pub fn name(&self) -> Rc<str> {
         self.rt.name_of(self.key)
     }
 

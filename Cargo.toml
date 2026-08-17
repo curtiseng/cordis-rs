@@ -1,6 +1,6 @@
 [package]
 name = "cordis-rs"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 rust-version = "1.85"
 description = "时空可组合性演算的 Rust 实现：可撤销 effect、响应式 coeffect、fiber 惯性生命周期、声明式配置层"

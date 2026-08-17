@@ -32,16 +32,16 @@ pub struct Runtime {
     fibers: RefCell<SlotMap<FiberKey, Fiber>>,
     /// 值存储 $\sigma$，按 (键, realm) 索引——即两层解析的第二层。
     store: RefCell<HashMap<(KeyId, RealmId), Binding>>,
-    spawner: LocalSpawner,
+    spawner: Rc<dyn Spawn>,
     counter: Cell<u64>,
     root: FiberKey,
 }
 
 impl Runtime {
-    pub(crate) fn new(spawner: LocalSpawner) -> Rc<Self> {
+    pub(crate) fn new(spawner: Rc<dyn Spawn>) -> Rc<Self> {
         let mut fibers = SlotMap::with_key();
         let root = fibers.insert(Fiber {
-            name: "root",
+            name: Rc::from("root"),
             parent: None,
             inject: Vec::new(),
             realms: Rc::new(HashMap::new()),
@@ -108,8 +108,9 @@ impl Runtime {
         self.with_fiber(key, |f| f.error.clone()).flatten()
     }
 
-    pub(crate) fn name_of(&self, key: FiberKey) -> &'static str {
-        self.with_fiber(key, |f| f.name).unwrap_or("<已移除>")
+    pub(crate) fn name_of(&self, key: FiberKey) -> Rc<str> {
+        self.with_fiber(key, |f| f.name.clone())
+            .unwrap_or_else(|| Rc::from("<已移除>"))
     }
 
     pub(crate) fn tracked_effects(&self, key: FiberKey) -> usize {
@@ -310,9 +311,7 @@ impl Runtime {
         };
         let shared = future.shared();
         rt.with_fiber_mut(key, |fiber| fiber.inertia = Some(shared.clone()));
-        rt.spawner
-            .spawn_local(shared.map(|_| ()))
-            .expect("执行器已关闭");
+        rt.spawner.spawn(Box::pin(shared.map(|_| ())));
     }
 
     async fn reload(rt: Rc<Runtime>, key: FiberKey) {
@@ -471,7 +470,7 @@ impl Runtime {
         realms: Rc<HashMap<KeyId, RealmId>>,
     ) -> FiberKey {
         let fiber = Fiber {
-            name: component.name(),
+            name: Rc::from(component.name()),
             parent: Some(parent),
             inject: component.inject(),
             realms,
@@ -495,30 +494,80 @@ enum Transition {
     Unload,
 }
 
-/// 一个 Cordis 应用：一个执行器加上它的运行时。
+/// 宿主提供的任务创建能力。
 ///
-/// 论文注 2 特意点了 Rust：future 是惰性的，宿主必须自行 spawn 任务才能让
-/// 转换推进。所以 `create_task` 在这里是显式的，而 `App` 就是那个宿主。
-pub struct App {
-    pool: LocalPool,
+/// 论文注 2 特意点了 Rust：future 是惰性的，**宿主必须自行 spawn 任务**，转换
+/// 才会推进。所以任务创建不是内核的内部细节，而是演算的一个显式参数——把它做成
+/// 可注入的，比硬编码一个执行器更贴近论文。
+///
+/// 实际后果是：内核本身不含任何 IO，也不绑定任何异步运行时。要让子进程、套接字
+/// 之类的东西成为一等 fiber，宿主把自己的执行器接进来即可（tokio 的 `LocalSet`、
+/// 浏览器里的 `wasm-bindgen-futures`，或者一个手写的队列）。
+pub trait Spawn {
+    /// 接管一个任务并负责把它推进到完成。
+    ///
+    /// 任务被丢弃而不驱动不会破坏安全性：`inertia` 是一个 `Shared`，谁 await 谁
+    /// 就承担 poll，所以 [`Context::quiesce`] 会把它等的那次转换就地驱动完。丢弃
+    /// 任务的实际后果是转换只在有人等它时才推进，而没有任何依赖方去等的那些
+    /// 转换会一直停在飞行中。
+    fn spawn(&self, task: LocalBoxFuture<'static, ()>);
+}
+
+/// 一个不自带执行器的内核。
+///
+/// 宿主已经有自己的执行器时用这个；想要开箱即用的单文件程序用 [`App`]。
+pub struct Kernel {
     rt: Rc<Runtime>,
 }
 
-impl App {
-    pub fn new() -> Self {
-        let pool = LocalPool::new();
-        let rt = Runtime::new(pool.spawner());
-        App { pool, rt }
+impl Kernel {
+    pub fn new(spawner: Rc<dyn Spawn>) -> Kernel {
+        Kernel {
+            rt: Runtime::new(spawner),
+        }
     }
 
     /// 根上下文。
     pub fn root(&self) -> Context {
         Context::for_fiber(self.rt.clone(), self.rt.root())
     }
+}
+
+/// 把 `futures` 自带的单线程执行器接成 [`Spawn`]。
+struct PoolSpawner(LocalSpawner);
+
+impl Spawn for PoolSpawner {
+    fn spawn(&self, task: LocalBoxFuture<'static, ()>) {
+        self.0.spawn_local(task).expect("执行器已关闭");
+    }
+}
+
+/// 一个自带执行器的 Cordis 应用。
+pub struct App {
+    pool: LocalPool,
+    kernel: Kernel,
+}
+
+impl App {
+    pub fn new() -> Self {
+        let pool = LocalPool::new();
+        let kernel = Kernel::new(Rc::new(PoolSpawner(pool.spawner())));
+        App { pool, kernel }
+    }
+
+    /// 根上下文。
+    pub fn root(&self) -> Context {
+        self.kernel.root()
+    }
+
+    pub fn kernel(&self) -> &Kernel {
+        &self.kernel
+    }
 
     /// 把所有飞行中的转换推进到静止。
     ///
-    /// 「静止」正是论文合流性（定理 68）所讨论的那个状态。
+    /// 「静止」正是论文合流性（定理 68）所讨论的那个状态。异步代码里用
+    /// [`Context::quiesce`]。
     pub fn settle(&mut self) {
         self.pool.run_until_stalled();
     }
