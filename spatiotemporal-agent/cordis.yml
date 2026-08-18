@@ -38,7 +38,7 @@
 - id: doc
   name: doc
   config:
-    path: spatiotemporal-agent/assets/sample.md
+    path: README.md
 
 - id: read-doc
   name: read-doc

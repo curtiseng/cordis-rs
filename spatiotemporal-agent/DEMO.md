@@ -4,55 +4,68 @@
 
 ```bash
 ./spatiotemporal-agent/scripts/build-guests.sh
-export DEEPSEEK_API_KEY=sk-你的key   # 标准模式；smoke 不需要
+export DEEPSEEK_API_KEY=sk-你的key   # 标准 / 创造；smoke 不需要
 ```
 
-## 1. 标准模式（浏览器）
+## 1. 推荐 Demo：创造模式 + code-stats（见 README 截图）
+
+```bash
+cargo run -p spatiotemporal-agent -- --creation
+```
+
+打开 http://127.0.0.1:8787 。**新开会话**，确认左栏模式为 **创造**。
+
+### 1.1 安装 code-stats（需点「批准」）
+
+> 用 define_script 安装 id `code-stats`：脚本文件 `plugins/generated/code-stats.js`，登记工具 `code-stats`，参数 JSON 含 `path`、`exts`、`mode`；内部用 host.callTool 调 bash 和 read。等我批准。
+
+批准后左栏 **plugins / tools** 应出现 `code-stats`（**仅当前会话**）。
+
+### 1.2 统计代码行数
+
+> 统计代码行数
+
+或更具体：
+
+> 用 code-stats 统计整个工作区，按扩展名分组，给出总行数、代码/注释/空行占比。
+
+期望：中间栏出现多步 tool 链路（`bash`、`read`、`code-stats`…），回复含总览表与按 `.rs` 等扩展名分组的明细——与 [`assets/ui.jpg`](assets/ui.jpg) 同类结果。
+
+### 1.3 会话隔离（可选）
+
+- **新开会话**：左栏不应再有 `code-stats`。
+- **切回安装会话**：从 `.agent/sessions/{id}.patch.json` 恢复，`code-stats` 仍在。
+
+---
+
+## 2. 标准模式（outline / bash / web）
 
 ```bash
 cargo run -p spatiotemporal-agent
 ```
 
-打开 http://127.0.0.1:8787 。界面左侧是 **plugins**（已挂载 fiber 组件）与 **tools**（LLM 可调用函数），中间会话，右侧**工作区**预览（默认 `README.md` markdown 快照；改文件用 read/bash）。
-
-### 左栏 plugins vs tools
-
-| 栏 | 含义 | 例子 |
-|---|---|---|
-| plugins | 运行时 fiber 组件 | `fs-sandbox`、`tool-fs`、`stats`、`creation-tools` |
-| tools | 模型 function call 入口 | `read`/`write`/`edit`（来自 `tool-fs`）、`stats`、`outline` |
+界面左侧 **plugins**（fiber 组件）与 **tools**（LLM 可调用函数）；中间会话；右侧**工作区目录树**。`outline` / `cite` / `stats` 读工作区 `README.md` 快照。
 
 ### 推荐第一轮
 
-> 用 outline 列出文档结构，用 stats 报字数和标题数，再解释「四种基质」分别是什么。
-
-期望：至少调用 `outline`、`stats` 或 `cite`，左侧 tool trace 可见基质标签。
+> 用 outline 列出 README 结构，用 stats 报字数和标题数，再解释「四种基质」分别是什么。
 
 ### 推荐第二轮（bash）
 
 > 在工作区跑 `cargo run -p spatiotemporal-agent -- --smoke`，把输出里 cite 那一段贴给我。
 
-期望：调用 `bash`，cwd 限制在工作区根。
-
 ### 推荐第三轮（web_fetch）
 
 > 抓取 https://crates.io/api/v1/crates/spatiotemporal ，告诉我最新版本号。
 
-期望：调用 `web_fetch`，返回 JSON 摘要。
-
 ### Session 与工作区
 
-- **工作区**：顶栏下拉切换项目目录（recent 记在启动 cwd 的 `.agent/workspaces.json`）；fs/bash 沙箱随切换更新。
-- **会话**：每个工作区独立 `.agent/sessions/`；`{id}.jsonl` 存聊天与工具链路，`{id}.patch.json` 存该会话热装的 patch。
-- 切换会话后中间栏 history 与左栏 plugins/tools **自动刷新**（不必整页 reload）；可连续多轮追问「刚才 stats 的结果是多少」，或在左栏切到带/不带热装工具的其它会话做对比。
-
-### 创造模式下的会话 patch
-
-在会话 A 批准 `define_script` 后，仅会话 A 的左栏出现新 tool；**新开会话 B 默认没有**（除非 B 自己再装，或写进了全局 `cordis.yml` / `cordis.patch.yml`）。切回 A 会从 `.patch.json` 恢复。
+- **工作区**：顶栏下拉切换项目目录（recent 记在 `.agent/workspaces.json`）。
+- **会话**：`{id}.jsonl` 存聊天与工具链路，`{id}.patch.json` 存热装 patch；切换会话自动刷新左栏 runtime。
 
 ---
 
-## 2. Smoke（无 API key / CI）
+## 3. Smoke（无 API key / CI）
 
 ```bash
 cargo run -p spatiotemporal-agent -- --smoke
@@ -64,13 +77,11 @@ cargo run -p spatiotemporal-agent -- --smoke
 
 ---
 
-## 3. 编码模式
+## 4. 编码模式
 
 ```bash
 cargo run -p spatiotemporal-agent -- --coding
 ```
-
-或在浏览器点 **「标准 → 编码 → 创造」** 切到编码（`POST /api/mode` `{"profile":"coding"}`）。
 
 - `max_rounds` 见 `cordis.coding.yml`，compaction 限额提高
 - 禁用 `outline` / `cite` / `stats` / `read_doc`
@@ -78,76 +89,56 @@ cargo run -p spatiotemporal-agent -- --coding
 
 ---
 
-## 4. 创造模式
+## 5. 创造模式其它试玩
 
-```bash
-cargo run -p spatiotemporal-agent -- --creation
-```
+浏览器 **待审批** 面板：`approval-policy` 默认 script / wasm / process / patch 需审批；审计在 `.agent/approvals.jsonl`。
 
-或在浏览器点 **「标准 → 编码 → 创造」** 切到创造（`POST /api/mode` `{"profile":"creation"}`），插件树会热对账，无需重启。
-
-浏览器会多出**待审批**面板。`approval-policy` 默认要求 script / wasm / process / patch 走审批；审计在 `.agent/approvals.jsonl`。
-
-### 4.1 检视运行时
+### inspect
 
 > inspect_tools 和 inspect_plugins 有什么区别？各列几个名字。
 
-### 4.2 试装脚本（需点「批准」）
+### 小型 script 试装
 
-> 用 define_script 提交 id `demo-hello`：登记工具 hello，参数 JSON `{"name":"..."}`，返回 `Hello, {name}`。
+> 用 define_script 提交 id `demo-hello`：工具 hello，参数 `{"name":"..."}`，返回 `Hello, {name}`。
 
-批准后左侧应多一个 script 工具（**仅当前会话**）；拒绝则不会热装。切到其它会话或新开会话，不应看到该 tool，除非它们也有自己的 `.patch.json`。
+### patch 试跑
 
-### 4.3 Patch 试跑（需审批）
-
-> run_patch 试跑一层：insert 一行 disabled cite（id cite），看 inspect_tools 是否少了 cite；然后 revert_patch。
+> run_patch 试跑一层：disabled cite（id cite），看 inspect_tools 是否少了 cite；然后 revert_patch。
 
 ---
 
-## 5. 四种基质对照
+## 6. 四种基质对照
 
 | 基质 | demo 中的例子 | 换实现 |
 |---|---|---|
 | native | `tool-fs`、`deepseek`、`web` | `cordis.smoke.yml` 把 llm/ui 换成 echo/probe |
 | wasm | `outline` | 换 guest 文件名，仍用 `name: wasm` |
-| script | `cite`、`stats` | `define_script` 或改 `config.file` |
+| script | `cite`、`stats`、**`code-stats`（创造热装）** | `define_script` 或改 `config.file` |
 | process | 需自编 guest | `name: process`，`config.command: …` |
 
-**IO 分工**：native 的 `read`/`bash` 负责工作区 IO；script/wasm 叶子默认只 grant `markdown`。叶子内要调其它 tool 用 **`host.callTool` / `call-tool`**，不要 grant `fs`。
-
-子进程 guest 构建：
-
-```bash
-./crates/spatiotemporal-process/scripts/build-guests.sh
-```
-
-在 `cordis.patch.yml` 里 insert 一行 process（见 `cordis.patch.example.yml`）。
+**IO 分工**：native 的 `read`/`bash` 负责工作区 IO；script/wasm 叶子默认只 `grant: [markdown]` 或不 grant。**code-stats** 不 grant fs，在脚本内 `host.callTool("bash"|"read", …)`。
 
 ---
 
-## 6. 可选：叠 patch 文件
-
-复制示例并按需修改：
+## 7. 可选：叠 patch 文件
 
 ```bash
 cp spatiotemporal-agent/cordis.patch.example.yml cordis.patch.yml
 cargo run -p spatiotemporal-agent
 ```
 
-或用创造模式 `reload_patch` / `save_patch`：前者重载 **file 层** `cordis.patch.yml`；后者把**当前会话** patch 导出为 YAML（会话本身已自动存于 `.agent/sessions/*.patch.json`）。
+`save_patch` 可把**当前会话** patch 导出为 YAML（会话已自动存于 `.agent/sessions/*.patch.json`）。
 
 ---
 
-## 7. 常见问题
+## 8. 常见问题
 
 | 现象 | 处理 |
 |---|---|
 | 编不了 outline.wasm | 跑 `spatiotemporal-agent/scripts/build-guests.sh` |
 | 缺 DEEPSEEK_API_KEY | `export` 后重启，或用 `--smoke` |
-| 创造模式 define 没生效 | 浏览器点「批准」；看 `.agent/approvals.jsonl` |
+| define 后左栏没 code-stats | 浏览器点「批准」；确认未切到新会话 |
+| 新会话又有 code-stats | 检查是否写进了全局 `cordis.yml`（应只用会话 patch） |
 | 端口占用 | `PORT=8788 cargo run -p spatiotemporal-agent` |
-| 工具调用轮次用尽 | 切编码模式、拆小任务，或调高 `cordis.yml` 的 `max_rounds` |
-| LLM 报 tool 消息格式错误 | **新开会话**；旧 session 经 compaction 后可能 orphan tool 消息（已修复，但脏 history 仍建议丢弃） |
-| 写 script 工具却要读文件 | 不要 grant fs；LLM 直接 `read`/`bash`，或 script 内 `host.callTool` |
-| 想加扫描/统计类能力 | 优先 `bash` 或正式 native 插件，不要为一次性需求写半截插件再热装 |
-| 右侧/回复无 Markdown 样式 | 检查网络能否访问 jsDelivr（marked@15、DOMPurify@3）；离线时回退纯文本 |
+| LLM 报 tool 消息格式错误 | **新开会话** |
+| 写 script 却要读文件 | 不要 grant fs；用 `host.callTool("read", …)` |

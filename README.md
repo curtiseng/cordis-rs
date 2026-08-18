@@ -27,14 +27,16 @@ impl Component for Worker {
 
 [`spatiotemporal-agent/`](spatiotemporal-agent/) 是演算之上的**插件化 agent harness**，形态对齐 [DeepSeek Harness (dsh)](https://github.com/deepseek-ai/deepseek-harness)：**文档、工具、LLM、界面全是 `cordis.yml` 里的一行行 fiber**，换实现 = `disabled` + `insert`，不必改宿主代码。
 
-![Agent Web UI：插件树、工具链路、Markdown 文档](spatiotemporal-agent/assets/ui.jpg)
+![Agent Web UI：创造模式热装 code-stats，统计代码行数；插件树、工具链路、工作区目录](spatiotemporal-agent/assets/ui.jpg)
 
 ```bash
 rustup target add wasm32-wasip2
 ./spatiotemporal-agent/scripts/build-guests.sh   # outline.wasm
 export DEEPSEEK_API_KEY=sk-…
-cargo run -p spatiotemporal-agent                # http://127.0.0.1:8787
+cargo run -p spatiotemporal-agent -- --creation   # http://127.0.0.1:8787
 ```
+
+**推荐首轮**：切创造模式 → `define_script` 安装 **code-stats** → 批准 → 「统计代码行数」。script 叶子通过 `host.callTool` 编排 native 的 `bash` / `read`，结果见 [`DEMO.md`](spatiotemporal-agent/DEMO.md)。
 
 | 能力 | 说明 |
 |---|---|

@@ -100,6 +100,7 @@ fn run_loop(
     let (history, _report) = compact(history, compaction);
     messages.extend(history.iter().cloned());
     messages.push(json!({ "role": "user", "content": user }));
+    let new_from = messages.len();
 
     let schemas = tools.schemas();
     let mut traces = Vec::new();
@@ -119,7 +120,7 @@ fn run_loop(
         let response = match llm.complete(body) {
             Ok(value) => value,
             Err(error) => {
-                return finish(messages, error.to_string(), traces, steps);
+                return finish(messages, error.to_string(), traces, steps, new_from);
             }
         };
 
@@ -198,10 +199,16 @@ fn run_loop(
             .unwrap_or("（模型没有返回文本）")
             .to_owned();
         messages.push(sanitize_message(&message));
-        return finish(messages, reply, traces, steps);
+        return finish(messages, reply, traces, steps, new_from);
     }
 
-    finish(messages, "工具调用轮次用尽了。".into(), traces, steps)
+    finish(
+        messages,
+        "工具调用轮次用尽了。".into(),
+        traces,
+        steps,
+        new_from,
+    )
 }
 
 /// DeepSeek 不接受回传 `reasoning_content` 与 tool_calls 里的 `index`。

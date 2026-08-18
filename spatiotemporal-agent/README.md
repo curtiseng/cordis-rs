@@ -1,8 +1,18 @@
 # Spatiotemporal Agent
 
-读一篇 Markdown，用 DeepSeek 当讲解员，在浏览器里对话。宿主几乎只做两件事：建一张插件注册表，再用 `Loader` 把 `cordis.yml` 对账成一棵 fiber 树。文档、工具、LLM、界面都是插件。
+插件化 agent harness：在浏览器里多轮对话、调工具；**创造模式**可审批热装 script 叶子（如 **code-stats**），热装绑定会话并持久化到 `.agent/sessions/`。宿主几乎只做两件事：建一张插件注册表，再用 `Loader` 把 `cordis.yml` 对账成一棵 fiber 树。
 
-![创造模式：左侧插件树含热装的 word-count，中间会话调工具统计 sample.md，右侧原文](assets/ui.jpg)
+![创造模式：会话热装 code-stats，统计本仓库代码行数；左侧插件/工具树，右侧工作区目录](assets/ui.jpg)
+
+## 一眼能做什么
+
+典型试玩（见 [`DEMO.md`](DEMO.md)）：
+
+1. 浏览器切到 **创造** 模式，新开会话。
+2. 让 agent 用 `define_script` 安装 `code-stats`（脚本已在 `plugins/generated/code-stats.js`），在界面点 **批准**。
+3. 发送「统计代码行数」——agent 通过 `host.callTool` 编排 `bash` / `read`，返回按扩展名分组的行数、注释占比等（见上图）。
+
+`code-stats` **只存在于当前会话**；新开会话需重新安装，或 `save_patch` 导出到 `cordis.patch.yml`。
 
 ## 启动
 
@@ -74,7 +84,7 @@ cargo run -p spatiotemporal-agent -- --creation   # 启动即创造模式
 
 也可 `POST /api/mode`：`{"profile": "creation"}` 或 `{"creation": true}`。
 
-看到 `打开 http://127.0.0.1:8787` 后，用浏览器打开。默认以**工作区根**（启动时的 cwd；`WORKSPACE` 可覆盖）为沙箱；右侧预览 `README.md`（markdown 快照，供 outline/cite/stats）。`AGENTS.md` 注入 system prompt。界面里有**试玩按钮**；完整脚本见 [`DEMO.md`](DEMO.md)。Markdown 渲染依赖 jsDelivr（marked@15 / DOMPurify@3；离线回退纯文本）。
+看到 `打开 http://127.0.0.1:8787` 后，用浏览器打开。默认以**工作区根**（启动时的 cwd；`WORKSPACE` 可覆盖）为 fs/bash 沙箱；右侧为**工作区目录树**。`outline` / `cite` / `stats` 等 demo 工具读工作区 `README.md` 快照；`AGENTS.md` 注入 system prompt。界面底部有**试玩按钮**；完整脚本见 [`DEMO.md`](DEMO.md)。Markdown 渲染依赖 jsDelivr（marked@15 / DOMPurify@3；离线回退纯文本）。
 
 **左栏**：**plugins** = 已挂载 fiber 组件；**tools** = LLM 可调用的函数（native 常一对多，script/wasm 叶子常与插件同名）。完整配置树用创造模式 `inspect_config` 查看。
 
@@ -137,10 +147,10 @@ bootstrap → profile（cordis.coding.yml / cordis.creation.yml）→ cordis.pat
 
 在工作区根目录放 `AGENTS.md` 可注入项目级指令；`system-prompt` 插件还会把各工具的 JSON schema 写进 system prompt。
 
-换一篇 markdown 快照（路径相对工作区）：
+可选：启动时传入路径可改 markdown 快照（仅影响 `outline` / `cite` / `stats` / `read_doc`）：
 
 ```bash
-cargo run -p spatiotemporal-agent -- spatiotemporal-agent/assets/sample.md
+cargo run -p spatiotemporal-agent -- docs/paper.md
 ```
 
 ### 5. 不调网络的自检
@@ -205,4 +215,4 @@ wasm / script 适合叶子工具：调用稀疏、payload 小、能力面由 WIT
 
 ## Demo 试玩
 
-详见 [`DEMO.md`](DEMO.md)：标准模式三轮（outline/stats、bash、web_fetch）、smoke、创造模式 define/inspect/patch。可选 `cordis.patch.example.yml` 演示 file 层 patch。
+详见 [`DEMO.md`](DEMO.md)：**创造模式安装 code-stats 并统计代码**（推荐）、标准模式 outline/bash/web_fetch、smoke、编码模式。可选 `cordis.patch.example.yml` 演示 file 层 patch。

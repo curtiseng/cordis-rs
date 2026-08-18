@@ -39,7 +39,7 @@ spatiotemporal-agent/     agent harness（宿主 + cordis.yml + 浏览器 UI）
   cordis.smoke.yml        CI：echo LLM + probe 界面
   cordis.creation.yml     创造模式 patch
   cordis.coding.yml       编码模式 patch
-  assets/                 Web UI、sample.md
+  assets/                 Web UI、CODING.prompt.md
 scripts/                  build-guests.sh（各子项目各一份）
 .github/workflows/ci.yml  kernel / msrv / wasm / script / agent 五条 job
 ```

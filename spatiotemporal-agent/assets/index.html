@@ -2038,8 +2038,9 @@
       { label: "读+改", text: "先 read 目标文件，再 edit 实现需求，最后 bash 跑 cargo test 验证。" },
     ];
     const CREATION_PROMPTS = [
-      { label: "inspect", text: "inspect_tools 和 inspect_plugins 各列什么？stats 是什么基质？" },
-      { label: "define 试装", text: "用 define_script 提交 id demo-wave：工具 wave 返回 👋 + 参数 name；等我批准。" },
+      { label: "装 code-stats", text: "用 define_script 安装 id code-stats，脚本 plugins/generated/code-stats.js，工具 code-stats；等我批准。" },
+      { label: "统计代码", text: "用 code-stats 统计整个工作区的代码行数，按扩展名分组，给出代码/注释/空行占比。" },
+      { label: "inspect", text: "inspect_tools 和 inspect_plugins 各列什么？code-stats 是什么基质？" },
     ];
 
     function renderPrompts(profile) {

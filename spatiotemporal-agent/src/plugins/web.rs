@@ -409,7 +409,6 @@ fn serve(ctx: ServeContext<'_>) {
                     if prior.is_empty() && !client_history.is_empty() {
                         prior = client_history;
                     }
-                    let prev_len = prior.len();
                     let profile = runtime.profile();
                     let mut turn = agent_loop.run_turn(TurnRequest {
                         llm,
@@ -421,11 +420,11 @@ fn serve(ctx: ServeContext<'_>) {
                         history: &prior,
                     });
                     turn.session_id = Some(session_id.clone());
-                    if turn.history.len() > prev_len {
+                    if !turn.new_messages.is_empty() {
                         let _ = session::append_messages(
                             &workspace_path,
                             &session_id,
-                            &turn.history[prev_len..],
+                            &turn.new_messages,
                         );
                     }
                     if !turn.steps.is_empty() {

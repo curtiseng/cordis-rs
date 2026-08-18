@@ -36,6 +36,8 @@ pub struct Turn {
     pub session_id: Option<String>,
     /// 不含 system 的完整会话（含 tool 消息），供下一轮传入。
     pub history: Vec<Value>,
+    /// 本轮新增消息（含 user），供持久化；与 compaction 后的 history 长度无关。
+    pub new_messages: Vec<Value>,
 }
 
 pub struct TurnRequest<'a> {
@@ -48,14 +50,22 @@ pub struct TurnRequest<'a> {
     pub history: &'a [Value],
 }
 
-pub fn finish(messages: Vec<Value>, reply: String, traces: Vec<Trace>, steps: Vec<Step>) -> Turn {
-    let history = messages.into_iter().skip(1).collect();
+pub fn finish(
+    messages: Vec<Value>,
+    reply: String,
+    traces: Vec<Trace>,
+    steps: Vec<Step>,
+    new_from: usize,
+) -> Turn {
+    let history = messages.iter().skip(1).cloned().collect();
+    let new_messages = messages.iter().skip(new_from).cloned().collect();
     Turn {
         reply,
         traces,
         steps,
         session_id: None,
         history,
+        new_messages,
     }
 }
 
@@ -103,4 +113,25 @@ pub fn fallback_system_prompt(
         );
     }
     prompt
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn finish_extracts_new_messages_independent_of_history_prefix() {
+        let messages = vec![
+            json!({"role":"system","content":"sys"}),
+            json!({"role":"assistant","content":"（较早的 40 条消息已压缩省略…）"}),
+            json!({"role":"user","content":"prior tail"}),
+            json!({"role":"user","content":"new question"}),
+            json!({"role":"assistant","content":"new answer"}),
+        ];
+        let turn = finish(messages, "new answer".into(), vec![], vec![], 3);
+        assert_eq!(turn.new_messages.len(), 2);
+        assert_eq!(turn.new_messages[0]["content"], "new question");
+        assert_eq!(turn.history.len(), 4);
+    }
 }
