@@ -1,3 +1,4 @@
+use std::cmp::Reverse;
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
@@ -70,7 +71,7 @@ pub fn list_sessions(workspace: &Path) -> spatiotemporal::Result<Vec<SessionSumm
             turns,
         });
     }
-    summaries.sort_by(|left, right| right.updated_at.cmp(&left.updated_at));
+    summaries.sort_by_key(|summary| Reverse(summary.updated_at));
     Ok(summaries)
 }
 
