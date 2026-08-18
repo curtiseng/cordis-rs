@@ -6,6 +6,7 @@ use spatiotemporal::{Component, Context, KeyId, Result, Steps, Value};
 
 use crate::host::{PromptInput, SystemPrompt};
 use crate::keys::{FsKey, PromptKey};
+use crate::runtime::AgentProfile;
 use serde_json::Value as JsonValue;
 
 /// 本地插件：从 AGENTS.md 与工具 schema 组装 system prompt。
@@ -42,10 +43,24 @@ impl SystemPrompt for PromptService {
             input.workspace
         ));
 
-        if let Some(doc_path) = input.doc_path {
+        if let Some(doc_path) = input.doc_path
+            && input.profile != AgentProfile::Coding
+        {
             sections.push(format!(
                 "当前文档：{doc_path}。可用 read_doc / outline / cite 阅读。"
             ));
+        }
+
+        if input.profile == AgentProfile::Coding {
+            let coding_path = crate::host::root_dir().join("assets/CODING.prompt.md");
+            if coding_path.exists()
+                && let Ok(text) = fs::read_to_string(&coding_path)
+                && !text.trim().is_empty()
+            {
+                sections.push(text.trim().to_owned());
+            } else {
+                sections.push(coding_mode_fallback());
+            }
         }
 
         if let Some(path) = &self.agents_path
@@ -69,7 +84,7 @@ impl SystemPrompt for PromptService {
                 .into(),
         );
 
-        if input.creation {
+        if input.profile == AgentProfile::Creation {
             sections.push(
                 "【创造模式】inspect_* 查看运行时；define_script 提交安装需用户界面批准；\
                  undefine_plugin 禁用；save_patch 持久化。"
@@ -79,6 +94,12 @@ impl SystemPrompt for PromptService {
 
         sections.join("\n\n")
     }
+}
+
+fn coding_mode_fallback() -> String {
+    "【编码模式】专注 read/write/edit/bash 完成代码任务；同一文件少重复 read；\
+     改完用一条 bash 验证（cargo test/clippy）；demo 文档工具已禁用。"
+        .into()
 }
 
 fn tool_guide(tools: &crate::host::Toolbox) -> String {
@@ -150,7 +171,7 @@ mod tests {
         let text = service.build(PromptInput {
             workspace: "/tmp",
             doc_path: None,
-            creation: false,
+            profile: AgentProfile::Standard,
             tools: &tools,
         });
         assert!(text.contains("read"));

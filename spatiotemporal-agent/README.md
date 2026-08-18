@@ -54,6 +54,15 @@ export DEEPSEEK_API_KEY=sk-你的key
 cargo run -p spatiotemporal-agent
 ```
 
+**编码模式**（写代码任务，更多 tool 轮次）：
+
+```bash
+cargo run -p spatiotemporal-agent -- --coding
+# 或浏览器点「标准 → 编码 → 创造」
+```
+
+也可 `POST /api/mode`：`{"profile": "coding"}` 或 `{"profile": "creation"}`（三档互斥）。
+
 **创造模式**（可运行时切换，不必重启）：
 
 ```bash
@@ -61,7 +70,7 @@ cargo run -p spatiotemporal-agent -- --creation   # 启动即创造模式
 # 或标准模式启动后，在浏览器点「标准 / 创造」切换
 ```
 
-也可 `POST /api/mode`：`{"creation": true}`。
+也可 `POST /api/mode`：`{"profile": "creation"}` 或 `{"creation": true}`。
 
 看到 `打开 http://127.0.0.1:8787` 后，用浏览器打开。默认读 `assets/sample.md`（demo  tour，含四种基质与工具场景说明）。界面里有**试玩按钮**；完整脚本见 [`DEMO.md`](DEMO.md)。右侧文档与讲解员回复会渲染 Markdown（依赖 jsDelivr 上的 marked@15 / DOMPurify@3；离线时回退纯文本）。
 

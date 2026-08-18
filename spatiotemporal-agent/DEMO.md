@@ -58,33 +58,47 @@ cargo run -p spatiotemporal-agent -- --smoke
 
 ---
 
-## 3. 创造模式
+## 3. 编码模式
+
+```bash
+cargo run -p spatiotemporal-agent -- --coding
+```
+
+或在浏览器点 **「标准 → 编码 → 创造」** 切到编码（`POST /api/mode` `{"profile":"coding"}`）。
+
+- `max_rounds: 24`，compaction 限额提高
+- 禁用 `outline` / `cite` / `stats` / `read_doc`
+- 注入 `assets/CODING.prompt.md`（读→改→测，少重复 read）
+
+---
+
+## 4. 创造模式
 
 ```bash
 cargo run -p spatiotemporal-agent -- --creation
 ```
 
-或在**标准模式**浏览器里点 **「标准 / 创造」** 按钮（`POST /api/mode`），插件树会热对账，无需重启。
+或在浏览器点 **「标准 → 编码 → 创造」** 切到创造（`POST /api/mode` `{"profile":"creation"}`），插件树会热对账，无需重启。
 
 浏览器会多出**待审批**面板。`approval-policy` 默认要求 script / wasm / process / patch 走审批；审计在 `.agent/approvals.jsonl`。
 
-### 3.1 检视运行时
+### 4.1 检视运行时
 
 > inspect_tools 和 inspect_plugins 有什么区别？各列几个名字。
 
-### 3.2 试装脚本（需点「批准」）
+### 4.2 试装脚本（需点「批准」）
 
 > 用 define_script 提交 id `demo-hello`：登记工具 hello，参数 JSON `{"name":"..."}`，返回 `Hello, {name}`。
 
 批准后左侧应多一个 script 工具；拒绝则不会热装。
 
-### 3.3 Patch 试跑（需审批）
+### 4.3 Patch 试跑（需审批）
 
 > run_patch 试跑一层：insert 一行 disabled cite（id cite），看 inspect_tools 是否少了 cite；然后 revert_patch。
 
 ---
 
-## 4. 四种基质对照
+## 5. 四种基质对照
 
 | 基质 | demo 中的例子 | 换实现 |
 |---|---|---|
@@ -103,7 +117,7 @@ cargo run -p spatiotemporal-agent -- --creation
 
 ---
 
-## 5. 可选：叠 patch 文件
+## 6. 可选：叠 patch 文件
 
 复制示例并按需修改：
 
@@ -116,7 +130,7 @@ cargo run -p spatiotemporal-agent
 
 ---
 
-## 6. 常见问题
+## 7. 常见问题
 
 | 现象 | 处理 |
 |---|---|
@@ -124,4 +138,5 @@ cargo run -p spatiotemporal-agent
 | 缺 DEEPSEEK_API_KEY | `export` 后重启，或用 `--smoke` |
 | 创造模式 define 没生效 | 浏览器点「批准」；看 `.agent/approvals.jsonl` |
 | 端口占用 | `PORT=8788 cargo run -p spatiotemporal-agent` |
+| 工具调用轮次用尽 | 切到编码模式（24 轮）或拆小任务；见 `cordis.coding.yml` |
 | 右侧/回复无 Markdown 样式 | 检查网络能否访问 jsDelivr（marked@15、DOMPurify@3）；离线时回退纯文本 |

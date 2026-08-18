@@ -7,6 +7,7 @@
 //! export DEEPSEEK_API_KEY=sk-...
 //! cargo run -p spatiotemporal-agent
 //! cargo run -p spatiotemporal-agent -- --creation   # 创造模式
+//! cargo run -p spatiotemporal-agent -- --coding     # 编码模式
 //! ```
 //!
 //! `--smoke` 叠一层 patch：DeepSeek 换成脚本 echo，Web 换成 probe。不需要 API key。
@@ -39,6 +40,7 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let smoke = args.iter().any(|a| a == "--smoke");
     let creation = args.iter().any(|a| a == "--creation");
+    let coding = args.iter().any(|a| a == "--coding");
     let doc_path = args.iter().find(|a| !a.starts_with('-')).map(PathBuf::from);
 
     let base_path = args
@@ -61,6 +63,7 @@ fn main() {
         layers.push(parse_patches(&text).unwrap_or_else(|error| panic!("{error}")));
     }
     let start_in_creation = creation && !smoke;
+    let start_in_coding = coding && !smoke && !creation;
     if let Some(path) = &doc_path {
         let path = if path.is_absolute() {
             path.clone()
@@ -104,8 +107,12 @@ fn main() {
 
     if start_in_creation {
         runtime
-            .set_creation_mode(true)
+            .set_profile(crate::runtime::AgentProfile::Creation)
             .unwrap_or_else(|error| panic!("开启创造模式失败：{error}"));
+    } else if start_in_coding {
+        runtime
+            .set_profile(crate::runtime::AgentProfile::Coding)
+            .unwrap_or_else(|error| panic!("开启编码模式失败：{error}"));
     }
 
     let surface = lookup_surface(&runtime.root()).unwrap_or_else(|| {

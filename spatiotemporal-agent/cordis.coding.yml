@@ -1,0 +1,29 @@
+# 编码模式：叠在标准组合之上。
+# 启动：cargo run -p spatiotemporal-agent -- --coding
+
+- id: agent-loop
+  config:
+    max_rounds: 24
+    compaction:
+      max_messages: 64
+      max_chars: 80000
+      keep_recent: 32
+      max_tool_chars: 12000
+
+- id: ui
+  config:
+    port: 8787
+    profile: coding
+
+# demo 文档工具在编码任务中通常分散轮次，coding 模式关掉。
+- id: outline
+  disabled: true
+
+- id: cite
+  disabled: true
+
+- id: stats
+  disabled: true
+
+- id: read-doc
+  disabled: true

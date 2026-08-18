@@ -80,7 +80,7 @@ fn run_loop(
         tools,
         workspace,
         doc_path,
-        creation,
+        profile,
         user,
         history,
     } = request;
@@ -89,11 +89,11 @@ fn run_loop(
         builder.build(crate::host::PromptInput {
             workspace,
             doc_path,
-            creation,
+            profile,
             tools,
         })
     } else {
-        crate::chat::fallback_system_prompt(workspace, doc_path, creation, tools)
+        crate::chat::fallback_system_prompt(workspace, doc_path, profile, tools)
     };
 
     let mut messages = vec![json!({ "role": "system", "content": system })];
@@ -103,8 +103,10 @@ fn run_loop(
 
     let schemas = tools.schemas();
     let mut traces = Vec::new();
+    let mut steps = Vec::new();
 
-    for _ in 0..max_rounds {
+    for (round_idx, _) in (0..max_rounds).enumerate() {
+        let round = round_idx + 1;
         let mut body = json!({
             "model": llm.model(),
             "messages": messages,
@@ -117,14 +119,38 @@ fn run_loop(
         let response = match llm.complete(body) {
             Ok(value) => value,
             Err(error) => {
-                return finish(messages, error.to_string(), traces);
+                return finish(messages, error.to_string(), traces, steps);
             }
         };
 
         let message = response["choices"][0]["message"].clone();
+
         if let Some(calls) = message.get("tool_calls").and_then(Value::as_array)
             && !calls.is_empty()
         {
+            let think = message
+                .get("reasoning_content")
+                .and_then(Value::as_str)
+                .filter(|text| !text.trim().is_empty())
+                .map(str::to_owned)
+                .or_else(|| {
+                    message
+                        .get("content")
+                        .and_then(Value::as_str)
+                        .filter(|text| !text.trim().is_empty())
+                        .map(str::to_owned)
+                });
+            if let Some(text) = think {
+                steps.push(crate::chat::Step {
+                    kind: "think".into(),
+                    round,
+                    text,
+                    tool: String::new(),
+                    substrate: String::new(),
+                    input: String::new(),
+                    output: String::new(),
+                });
+            }
             messages.push(message.clone());
             for call in calls {
                 let name = call["function"]["name"].as_str().unwrap_or("").to_owned();
@@ -145,7 +171,16 @@ fn run_loop(
                 };
                 traces.push(crate::chat::Trace {
                     tool: name.clone(),
-                    substrate,
+                    substrate: substrate.clone(),
+                    input: arguments.clone(),
+                    output: output.clone(),
+                });
+                steps.push(crate::chat::Step {
+                    kind: "tool".into(),
+                    round,
+                    text: String::new(),
+                    tool: name.clone(),
+                    substrate: substrate.clone(),
                     input: arguments.clone(),
                     output: output.clone(),
                 });
@@ -163,8 +198,8 @@ fn run_loop(
             .unwrap_or("（模型没有返回文本）")
             .to_owned();
         messages.push(message);
-        return finish(messages, reply, traces);
+        return finish(messages, reply, traces, steps);
     }
 
-    finish(messages, "工具调用轮次用尽了。".into(), traces)
+    finish(messages, "工具调用轮次用尽了。".into(), traces, steps)
 }

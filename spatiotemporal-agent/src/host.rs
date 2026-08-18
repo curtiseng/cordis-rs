@@ -44,7 +44,7 @@ pub trait Surface {
 pub struct PromptInput<'a> {
     pub workspace: &'a str,
     pub doc_path: Option<&'a str>,
-    pub creation: bool,
+    pub profile: crate::runtime::AgentProfile,
     pub tools: &'a Toolbox,
 }
 

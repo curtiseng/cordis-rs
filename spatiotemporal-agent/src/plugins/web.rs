@@ -13,7 +13,7 @@ use crate::chat::TurnRequest;
 use crate::host::{AgentLoop, Document, Llm, Roster, Surface, Toolbox};
 use crate::keys::{AgentLoopKey, Doc, FsKey, LlmKey, SurfaceKey};
 use crate::plugins::patch_watcher::{drain_reload, reload_patch_file};
-use crate::runtime::AgentRuntime;
+use crate::runtime::{AgentProfile, AgentRuntime};
 use crate::session;
 
 const INDEX: &str = include_str!("../../assets/index.html");
@@ -164,7 +164,7 @@ fn serve(ctx: ServeContext<'_>) {
         let response = match (method, url.as_str()) {
             (Method::Get, "/") => html(INDEX),
             (Method::Get, "/api/status") => {
-                let creation = runtime.creation_enabled();
+                let profile = runtime.profile();
                 let pending = approvals.pending_all();
                 let policy = approvals.policy();
                 json_ok(json!({
@@ -172,7 +172,9 @@ fn serve(ctx: ServeContext<'_>) {
                     "model": llm.model(),
                     "has_key": std::env::var("DEEPSEEK_API_KEY").is_ok(),
                     "surface": kind,
-                    "creation": creation,
+                    "profile": profile,
+                    "creation": profile == AgentProfile::Creation,
+                    "coding": profile == AgentProfile::Coding,
                     "workspace": workspace,
                     "pending": pending,
                     "pending_count": pending.len(),
@@ -192,6 +194,14 @@ fn serve(ctx: ServeContext<'_>) {
                     })).collect::<Vec<_>>(),
                 }))
             }
+            (Method::Get, "/api/sessions") => match session::list_sessions(workspace_path) {
+                Ok(sessions) => json_ok(json!({ "sessions": sessions })),
+                Err(error) => json_err(500, &error.to_string()),
+            },
+            (Method::Post, "/api/session") => {
+                let id = session::new_session_id();
+                json_ok(json!({ "session_id": id }))
+            },
             (Method::Get, "/api/session") => {
                 let session_id = query
                     .get("session_id")
@@ -199,9 +209,19 @@ fn serve(ctx: ServeContext<'_>) {
                     .unwrap_or_default();
                 if session_id.is_empty() {
                     json_err(400, "缺少 session_id")
+                } else if !session::valid_session_id(&session_id) {
+                    json_err(400, "非法 session_id")
                 } else {
                     match session::derive_messages(workspace_path, &session_id) {
-                        Ok(history) => json_ok(json!({ "session_id": session_id, "history": history })),
+                        Ok(history) => {
+                            let events = session::derive_events(workspace_path, &session_id)
+                                .unwrap_or_default();
+                            json_ok(json!({
+                                "session_id": session_id,
+                                "history": history,
+                                "events": events,
+                            }))
+                        }
                         Err(error) => json_err(500, &error.to_string()),
                     }
                 }
@@ -231,21 +251,51 @@ fn serve(ctx: ServeContext<'_>) {
                 let mut body = String::new();
                 let _ = request.as_reader().read_to_string(&mut body);
                 let payload: Value = serde_json::from_str(&body).unwrap_or(json!({}));
-                match payload.get("creation").and_then(Value::as_bool) {
-                    None => json_err(400, "需要 JSON 字段 creation: true/false"),
-                    Some(enabled) => match runtime.set_creation_mode(enabled) {
-                        Ok(applied) => json_ok(json!({
-                            "ok": true,
-                            "creation": runtime.creation_enabled(),
-                            "message": if enabled {
-                                "已开启创造模式"
+                let profile = payload
+                    .get("profile")
+                    .and_then(Value::as_str)
+                    .and_then(AgentProfile::parse)
+                    .or_else(|| {
+                        payload.get("creation").and_then(Value::as_bool).map(|enabled| {
+                            if enabled {
+                                AgentProfile::Creation
                             } else {
-                                "已关闭创造模式"
-                            },
-                            "created": applied.created,
-                            "updated": applied.updated,
-                            "removed": applied.removed,
-                        })),
+                                AgentProfile::Standard
+                            }
+                        })
+                    })
+                    .or_else(|| {
+                        payload.get("coding").and_then(Value::as_bool).map(|enabled| {
+                            if enabled {
+                                AgentProfile::Coding
+                            } else {
+                                AgentProfile::Standard
+                            }
+                        })
+                    });
+                match profile {
+                    None => json_err(
+                        400,
+                        "需要 JSON 字段 profile（standard/coding/creation）或 creation/coding: true/false",
+                    ),
+                    Some(profile) => match runtime.set_profile(profile) {
+                        Ok(applied) => {
+                            let message = match runtime.profile() {
+                                AgentProfile::Standard => "已切换到标准模式",
+                                AgentProfile::Coding => "已开启编码模式",
+                                AgentProfile::Creation => "已开启创造模式",
+                            };
+                            json_ok(json!({
+                                "ok": true,
+                                "profile": runtime.profile(),
+                                "creation": runtime.creation_enabled(),
+                                "coding": runtime.coding_enabled(),
+                                "message": message,
+                                "created": applied.created,
+                                "updated": applied.updated,
+                                "removed": applied.removed,
+                            }))
+                        }
                         Err(error) => json_err(400, &error.to_string()),
                     },
                 }
@@ -271,7 +321,9 @@ fn serve(ctx: ServeContext<'_>) {
                     .map(str::to_owned)
                     .filter(|id| !id.is_empty())
                     .unwrap_or_else(session::new_session_id);
-                if user.is_empty() {
+                if !session::valid_session_id(&session_id) {
+                    json_err(400, "非法 session_id")
+                } else if user.is_empty() {
                     json_err(400, "空消息")
                 } else {
                     let mut prior = session::derive_messages(workspace_path, &session_id)
@@ -280,13 +332,13 @@ fn serve(ctx: ServeContext<'_>) {
                         prior = client_history;
                     }
                     let prev_len = prior.len();
-                    let creation = runtime.creation_enabled();
+                    let profile = runtime.profile();
                     let mut turn = agent_loop.run_turn(TurnRequest {
                         llm,
                         tools,
                         workspace,
                         doc_path: Some(&doc.path()),
-                        creation,
+                        profile,
                         user: &user,
                         history: &prior,
                     });
@@ -297,6 +349,14 @@ fn serve(ctx: ServeContext<'_>) {
                             &session_id,
                             &turn.history[prev_len..],
                         );
+                    }
+                    if !turn.steps.is_empty() {
+                        let event = json!({
+                            "role": "event",
+                            "kind": "turn_steps",
+                            "steps": turn.steps,
+                        });
+                        let _ = session::append_message(workspace_path, &session_id, &event);
                     }
                     json_ok(serde_json::to_value(turn).unwrap_or(json!({})))
                 }

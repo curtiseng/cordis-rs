@@ -104,6 +104,38 @@
       font-size: 11px;
       margin-top: 2px;
     }
+    .session-new {
+      width: 100%;
+      margin: 0 0 10px;
+      padding: 7px 10px;
+      font: 600 11px/1 "IBM Plex Sans", sans-serif;
+      letter-spacing: 0.06em;
+      background: transparent;
+      color: var(--ice);
+      border: 1px solid var(--line);
+      cursor: pointer;
+    }
+    .session-new:hover { border-color: var(--ice); }
+    .session-item {
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(26, 51, 64, 0.7);
+      cursor: pointer;
+    }
+    .session-item:hover .session-title { color: var(--ice); }
+    .session-item.active .session-title { color: var(--ice); }
+    .session-title {
+      font-size: 12px;
+      color: var(--ink);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .session-meta {
+      font-family: "IBM Plex Mono", ui-monospace, monospace;
+      font-size: 10px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
     .stage { background: transparent; }
     .bus {
       display: flex;
@@ -244,6 +276,76 @@
     .trace.wasm { border-left-color: var(--wasm); }
     .trace.script { border-left-color: var(--script); }
     .trace.process { border-left-color: #9b8bf2; }
+    .turn-block { margin: 0 0 28px; }
+    .chain {
+      margin: 8px 0 14px;
+      padding: 10px 12px 12px;
+      border: 1px solid var(--line);
+      background: rgba(11, 24, 34, 0.55);
+      max-width: 52em;
+    }
+    .chain-head {
+      font-family: "IBM Plex Mono", ui-monospace, monospace;
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin: 0 0 8px;
+    }
+    .chain-bus {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px 6px;
+      margin: 0 0 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px dashed rgba(26, 51, 64, 0.8);
+    }
+    .chain-bus .node {
+      font-family: "IBM Plex Mono", ui-monospace, monospace;
+      font-size: 10px;
+      padding: 2px 7px;
+      border: 1px solid var(--line);
+      color: var(--ink);
+      background: rgba(255, 255, 255, 0.03);
+    }
+    .chain-bus .node.think { color: var(--ice); border-color: rgba(143, 212, 255, 0.35); }
+    .chain-bus .node.native { color: var(--native); border-color: rgba(61, 206, 168, 0.35); }
+    .chain-bus .node.wasm { color: var(--wasm); border-color: rgba(58, 160, 216, 0.35); }
+    .chain-bus .node.script { color: var(--script); border-color: rgba(224, 122, 95, 0.35); }
+    .chain-bus .node.process { color: #9b8bf2; border-color: rgba(155, 139, 242, 0.35); }
+    .chain-bus .arrow { color: var(--muted); font-size: 10px; }
+    .chain-steps { display: flex; flex-direction: column; gap: 8px; }
+    .chain-step {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 8px 10px;
+      align-items: start;
+    }
+    .chain-step .badge {
+      font-family: "IBM Plex Mono", ui-monospace, monospace;
+      font-size: 10px;
+      padding: 2px 6px;
+      border: 1px solid var(--line);
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .chain-step.think .badge { color: var(--ice); border-color: rgba(143, 212, 255, 0.35); }
+    .chain-step.tool .badge.native { color: var(--native); border-color: rgba(61, 206, 168, 0.35); }
+    .chain-step.tool .badge.wasm { color: var(--wasm); border-color: rgba(58, 160, 216, 0.35); }
+    .chain-step.tool .badge.script { color: var(--script); border-color: rgba(224, 122, 95, 0.35); }
+    .chain-step.tool .badge.process { color: #9b8bf2; border-color: rgba(155, 139, 242, 0.35); }
+    .chain-step .body {
+      margin: 0;
+      font-family: "IBM Plex Mono", ui-monospace, monospace;
+      font-size: 11px;
+      line-height: 1.45;
+      color: var(--muted);
+      white-space: pre-wrap;
+      max-height: 160px;
+      overflow: auto;
+    }
+    .chain-step.think .body { font-family: inherit; font-size: 12px; color: var(--ink); max-height: none; }
     .composer {
       display: grid;
       grid-template-columns: 1fr auto;
@@ -302,7 +404,11 @@
       color: var(--muted);
       border: 1px solid var(--line);
     }
-    .mode-toggle button.on {
+    .mode-toggle button.on.coding {
+      color: var(--native);
+      border-color: var(--native);
+    }
+    .mode-toggle button.on.creation {
       color: var(--script);
       border-color: var(--script);
     }
@@ -408,6 +514,11 @@
     </div>
     <div class="scroll">
       <div class="group">
+        <p class="eyebrow">sessions</p>
+        <button type="button" class="session-new" id="new-session-btn">+ 新会话</button>
+        <div id="sessions"></div>
+      </div>
+      <div class="group">
         <p class="eyebrow">plugins</p>
         <div id="plugins"></div>
       </div>
@@ -424,7 +535,7 @@
       <div class="status" id="model"></div>
       <div class="mode-toggle">
         <span>模式</span>
-        <button type="button" id="mode-btn" title="运行时切换创造模式（热对账插件树）">标准</button>
+        <button type="button" id="mode-btn" title="点击切换：标准 → 编码 → 创造">标准</button>
       </div>
       <div class="approval" id="approval" hidden>
         <p class="title">待审批</p>
@@ -464,6 +575,7 @@
     const history = [];
     const SESSION_KEY = "spatiotemporal-session";
     let sessionId = localStorage.getItem(SESSION_KEY) || "";
+    const toolSubstrates = {};
     const $ = (sel) => document.querySelector(sel);
 
     function renderPluginsAndTools(status) {
@@ -485,6 +597,82 @@
       return div;
     }
 
+    async function loadSessionList() {
+      try {
+        const res = await fetch("/api/sessions");
+        if (!res.ok) return;
+        const data = await res.json();
+        renderSessionList(data.sessions || []);
+      } catch {
+        /* 忽略 */
+      }
+    }
+
+    function formatSessionTime(ms) {
+      if (!ms) return "";
+      const date = new Date(ms);
+      const now = new Date();
+      const sameDay = date.toDateString() === now.toDateString();
+      if (sameDay) {
+        return date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+      }
+      return date.toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" });
+    }
+
+    function renderSessionList(sessions) {
+      const root = document.getElementById("sessions");
+      if (!root) return;
+      root.replaceChildren();
+      const list = Array.isArray(sessions) ? sessions.slice() : [];
+      if (sessionId && !list.some((item) => item.id === sessionId)) {
+        list.unshift({ id: sessionId, title: "新会话", turns: 0, updated_at: Date.now() });
+      }
+      if (!list.length) {
+        const empty = document.createElement("div");
+        empty.className = "session-meta";
+        empty.textContent = "暂无会话";
+        root.appendChild(empty);
+        return;
+      }
+      list.forEach((item) => {
+        const row = document.createElement("div");
+        row.className = "session-item" + (item.id === sessionId ? " active" : "");
+        row.innerHTML = `<div class="session-title">${escapeHtml(item.title || "新会话")}</div>
+          <div class="session-meta">${item.turns || 0} 轮 · ${formatSessionTime(item.updated_at)}</div>`;
+        row.addEventListener("click", () => switchSession(item.id));
+        root.appendChild(row);
+      });
+    }
+
+    async function switchSession(id) {
+      if (!id || id === sessionId) return;
+      sessionId = id;
+      localStorage.setItem(SESSION_KEY, sessionId);
+      history.length = 0;
+      await loadSession();
+      await loadSessionList();
+      $("#input").focus();
+    }
+
+    async function newSession() {
+      try {
+        const res = await fetch("/api/session", { method: "POST" });
+        const data = await res.json();
+        if (!res.ok || !data.session_id) {
+          add("系统", data.error || "创建会话失败", "err");
+          return;
+        }
+        sessionId = data.session_id;
+        localStorage.setItem(SESSION_KEY, sessionId);
+        history.length = 0;
+        rebuildLogFromSession([]);
+        await loadSessionList();
+        $("#input").focus();
+      } catch (err) {
+        add("系统", String(err), "err");
+      }
+    }
+
     async function loadSession() {
       if (!sessionId) return;
       try {
@@ -493,45 +681,203 @@
         const data = await res.json();
         history.length = 0;
         history.push(...(data.history || []));
+        const turns = buildTurns(data.history || [], data.events || []);
+        rebuildLogFromSession(turns);
       } catch {
         /* 忽略 */
       }
+    }
+
+    function substrateFor(tool) {
+      return toolSubstrates[tool] || "?";
+    }
+
+    function buildTurns(messages, events) {
+      const turns = reconstructTurnsFromHistory(messages);
+      const stepEvents = (events || []).filter((e) => e.kind === "turn_steps");
+      if (stepEvents.length === turns.length) {
+        turns.forEach((turn, idx) => {
+          const saved = stepEvents[idx]?.steps;
+          if (Array.isArray(saved) && saved.length) turn.steps = saved;
+        });
+      }
+      return turns;
+    }
+
+    function reconstructTurnsFromHistory(messages) {
+      const turns = [];
+      let i = 0;
+      while (i < messages.length) {
+        if (messages[i].role !== "user") {
+          i += 1;
+          continue;
+        }
+        const userText = messages[i].content || "";
+        i += 1;
+        const steps = [];
+        let reply = "";
+        while (i < messages.length && messages[i].role !== "user") {
+          const msg = messages[i];
+          if (msg.role === "assistant") {
+            i += 1;
+            const calls = msg.tool_calls;
+            if (Array.isArray(calls) && calls.length) {
+              const content = String(msg.content || "").trim();
+              if (content) {
+                steps.push({ kind: "think", round: steps.length + 1, text: content });
+              }
+              const toolResults = {};
+              let j = i;
+              while (j < messages.length && messages[j].role === "tool") {
+                toolResults[messages[j].tool_call_id] = messages[j].content || "";
+                j += 1;
+              }
+              calls.forEach((call) => {
+                const name = call.function?.name || "?";
+                steps.push({
+                  kind: "tool",
+                  round: steps.length + 1,
+                  tool: name,
+                  substrate: substrateFor(name),
+                  input: call.function?.arguments || "",
+                  output: toolResults[call.id] || "",
+                });
+              });
+              i = j;
+            } else {
+              reply = msg.content || "";
+              break;
+            }
+          } else if (msg.role === "tool") {
+            i += 1;
+          } else {
+            i += 1;
+          }
+        }
+        turns.push({ user: userText, steps, reply });
+      }
+      return turns;
+    }
+
+    function rebuildLogFromSession(turns) {
+      logEl.replaceChildren();
+      if (!turns.length) {
+        if (emptyEl) logEl.appendChild(emptyEl);
+        return;
+      }
+      turns.forEach((turn) => {
+        add("你", turn.user, "user");
+        const chain = renderChain(turn.steps);
+        if (chain) logEl.appendChild(chain);
+        if (turn.reply) add("讲解员", turn.reply);
+      });
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function renderChain(steps) {
+      if (!Array.isArray(steps) || !steps.length) return null;
+      const chain = document.createElement("div");
+      chain.className = "chain";
+      const bus = document.createElement("div");
+      bus.className = "chain-bus";
+      steps.forEach((step, idx) => {
+        if (idx) {
+          const arrow = document.createElement("span");
+          arrow.className = "arrow";
+          arrow.textContent = "→";
+          bus.appendChild(arrow);
+        }
+        const node = document.createElement("span");
+        if (step.kind === "think") {
+          node.className = "node think";
+          node.textContent = `思考 R${step.round || idx + 1}`;
+        } else {
+          const sub = step.substrate || substrateFor(step.tool);
+          node.className = "node " + sub;
+          node.textContent = step.tool || "?";
+        }
+        bus.appendChild(node);
+      });
+      chain.appendChild(bus);
+      const head = document.createElement("div");
+      head.className = "chain-head";
+      head.textContent = `工具链路 · ${steps.length} 步`;
+      chain.appendChild(head);
+      const stepsEl = document.createElement("div");
+      stepsEl.className = "chain-steps";
+      steps.forEach((step) => stepsEl.appendChild(renderChainStep(step)));
+      chain.appendChild(stepsEl);
+      return chain;
+    }
+
+    function renderChainStep(step) {
+      const el = document.createElement("div");
+      if (step.kind === "think") {
+        el.className = "chain-step think";
+        el.innerHTML = `<span class="badge">思考 · R${step.round || "?"}</span><div class="body md-body"></div>`;
+        setMarkdown(el.querySelector(".body"), step.text || "");
+        return el;
+      }
+      const sub = step.substrate || substrateFor(step.tool);
+      el.className = "chain-step tool";
+      const badge = document.createElement("span");
+      badge.className = "badge " + sub;
+      badge.textContent = `${sub} · ${step.tool || "?"}`;
+      const body = document.createElement("pre");
+      body.className = "body";
+      const input = String(step.input || "").slice(0, 240);
+      const output = String(step.output || "").slice(0, 1200);
+      body.textContent = (input ? `▸ ${input}\n` : "") + output;
+      el.appendChild(badge);
+      el.appendChild(body);
+      return el;
     }
 
     async function refreshStatus() {
       const status = await (await fetch("/api/status")).json();
       const ready = status.has_key;
       const workspace = status.workspace || "";
+      Object.keys(toolSubstrates).forEach((k) => delete toolSubstrates[k]);
+      (status.tools || []).forEach((t) => {
+        toolSubstrates[t.name] = t.substrate || "?";
+      });
       $("#model").textContent = ready
         ? `${status.model} · ${workspace}`
         : `${status.model} · 缺少 DEEPSEEK_API_KEY · ${workspace}`;
       $("#model").classList.toggle("warn", !ready);
       renderPending(status.pending);
-      renderPrompts(!!status.creation);
-      updateModeButton(!!status.creation);
+      renderPrompts(status.profile || (status.creation ? "creation" : "standard"));
+      updateModeButton(status.profile || (status.creation ? "creation" : "standard"));
       return status;
     }
 
-    function updateModeButton(creation) {
+    const PROFILES = ["standard", "coding", "creation"];
+
+    function updateModeButton(profile) {
       const btn = $("#mode-btn");
-      btn.textContent = creation ? "创造" : "标准";
-      btn.classList.toggle("on", creation);
+      const p = profile || "standard";
+      btn.textContent = p === "creation" ? "创造" : p === "coding" ? "编码" : "标准";
+      btn.classList.remove("on", "coding", "creation");
+      if (p === "coding") btn.classList.add("on", "coding");
+      else if (p === "creation") btn.classList.add("on", "creation");
     }
 
     async function toggleMode() {
       const status = await (await fetch("/api/status")).json();
-      const next = !status.creation;
+      const current = status.profile || (status.creation ? "creation" : "standard");
+      const idx = PROFILES.indexOf(current);
+      const next = PROFILES[(idx + 1) % PROFILES.length];
       const res = await fetch("/api/mode", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ creation: next }),
+        body: JSON.stringify({ profile: next }),
       });
       const data = await res.json();
       if (!res.ok) {
         add("系统", data.error || "切换模式失败", "err");
         return;
       }
-      add("系统", data.message || (next ? "创造模式已开" : "已回到标准模式"));
+      add("系统", data.message || `已切换到${next === "creation" ? "创造" : next === "coding" ? "编码" : "标准"}模式`);
       await refreshStatus();
       const updated = await (await fetch("/api/status")).json();
       renderPluginsAndTools(updated);
@@ -545,16 +891,23 @@
       { label: "smoke 自检", text: "用 bash 在工作区跑 cargo run -p spatiotemporal-agent -- --smoke，概括输出。" },
       { label: "crates.io", text: "用 web_fetch 抓 https://crates.io/api/v1/crates/spatiotemporal ，说最新版本。" },
     ];
+    const CODING_PROMPTS = [
+      { label: "修 clippy", text: "修复 spatiotemporal-agent 的 clippy warning，改完跑 cargo clippy -p spatiotemporal-agent -- -D warnings。" },
+      { label: "读+改", text: "先 read 目标文件，再 edit 实现需求，最后 bash 跑 cargo test 验证。" },
+    ];
     const CREATION_PROMPTS = [
       { label: "inspect", text: "inspect_tools 和 inspect_plugins 各列什么？stats 是什么基质？" },
       { label: "define 试装", text: "用 define_script 提交 id demo-wave：工具 wave 返回 👋 + 参数 name；等我批准。" },
     ];
 
-    function renderPrompts(creation) {
+    function renderPrompts(profile) {
       const root = document.getElementById("prompts");
       if (!root) return;
       root.replaceChildren();
-      const list = creation ? DEMO_PROMPTS.concat(CREATION_PROMPTS) : DEMO_PROMPTS;
+      const p = profile || "standard";
+      let list = DEMO_PROMPTS;
+      if (p === "coding") list = CODING_PROMPTS;
+      else if (p === "creation") list = DEMO_PROMPTS.concat(CREATION_PROMPTS);
       list.forEach((item) => {
         const btn = document.createElement("button");
         btn.type = "button";
@@ -624,6 +977,22 @@
     async function boot() {
       try {
         const status = await refreshStatus();
+        await loadSessionList();
+        if (!sessionId) {
+          try {
+            const res = await fetch("/api/sessions");
+            if (res.ok) {
+              const data = await res.json();
+              const latest = (data.sessions || [])[0];
+              if (latest?.id) {
+                sessionId = latest.id;
+                localStorage.setItem(SESSION_KEY, sessionId);
+              }
+            }
+          } catch {
+            /* 忽略 */
+          }
+        }
         await loadSession();
         renderPluginsAndTools(status);
         const bus = $("#bus");
@@ -670,12 +1039,13 @@
     }
 
     function addTrace(t) {
-      if (emptyEl && emptyEl.parentNode) emptyEl.remove();
-      const el = document.createElement("pre");
-      el.className = "trace " + (t.substrate || "");
-      el.textContent = `[${t.substrate}] ${t.tool}\n${(t.output || "").slice(0, 1200)}`;
-      logEl.appendChild(el);
-      logEl.scrollTop = logEl.scrollHeight;
+      return renderChain([{
+        kind: "tool",
+        tool: t.tool,
+        substrate: t.substrate,
+        input: t.input,
+        output: t.output,
+      }]);
     }
 
     function escapeHtml(s) {
@@ -729,7 +1099,15 @@
         });
         const turn = await res.json();
         wait.remove();
-        (turn.traces || []).forEach(addTrace);
+        if (Array.isArray(turn.steps) && turn.steps.length) {
+          const chain = renderChain(turn.steps);
+          if (chain) logEl.appendChild(chain);
+        } else {
+          (turn.traces || []).forEach((t) => {
+            const chain = addTrace(t);
+            if (chain) logEl.appendChild(chain);
+          });
+        }
         if (turn.error && !turn.reply) {
           add("系统", turn.error, "err");
         } else {
@@ -747,6 +1125,7 @@
           history.push({ role: "assistant", content: turn.reply || "" });
         }
         await refreshStatus();
+        await loadSessionList();
       } catch (err) {
         wait.remove();
         add("系统", String(err), "err");
@@ -758,6 +1137,7 @@
     $("#approve-btn").addEventListener("click", () => decide(true));
     $("#reject-btn").addEventListener("click", () => decide(false));
     $("#mode-btn").addEventListener("click", () => toggleMode());
+    $("#new-session-btn").addEventListener("click", () => newSession());
 
     boot();
   </script>
