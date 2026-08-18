@@ -201,7 +201,7 @@ fn serve(ctx: ServeContext<'_>) {
             (Method::Post, "/api/session") => {
                 let id = session::new_session_id();
                 json_ok(json!({ "session_id": id }))
-            },
+            }
             (Method::Get, "/api/session") => {
                 let session_id = query.get("session_id").cloned().unwrap_or_default();
                 if session_id.is_empty() {
