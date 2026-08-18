@@ -1,6 +1,6 @@
 [package]
 name = "spatiotemporal-agent"
-version = "0.4.0"
+version = "0.5.0"
 description = "一切都是插件：读一篇 Markdown、接 LLM、在浏览器里对话"
 publish = false
 edition.workspace = true

@@ -6,6 +6,7 @@
 /spatiotemporal-agent/target
 /spatiotemporal-agent/guests/*/target
 /spatiotemporal-agent/plugins/generated/*.js
+/spatiotemporal-agent/dist/
 .env
 spatiotemporal-agent/.env
 .agent/

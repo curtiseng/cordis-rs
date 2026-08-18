@@ -1563,7 +1563,7 @@ dependencies = [
 
 [[package]]
 name = "spatiotemporal"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "futures",
  "notify",
@@ -1575,7 +1575,7 @@ dependencies = [
 
 [[package]]
 name = "spatiotemporal-agent"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "futures",
  "notify",
@@ -1592,7 +1592,7 @@ dependencies = [
 
 [[package]]
 name = "spatiotemporal-process"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "futures",
  "serde",
@@ -1602,7 +1602,7 @@ dependencies = [
 
 [[package]]
 name = "spatiotemporal-script"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "futures",
  "rquickjs",
@@ -1611,7 +1611,7 @@ dependencies = [
 
 [[package]]
 name = "spatiotemporal-wasm"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "futures",
  "spatiotemporal",

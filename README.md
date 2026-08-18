@@ -61,7 +61,7 @@ cargo run -p spatiotemporal-agent -- --creation   # http://127.0.0.1:8787
 
 ```toml
 [dependencies]
-spatiotemporal = "0.4"
+spatiotemporal = "0.5"
 ```
 
 完整的最小例子见 `src/lib.rs` 顶部的文档，`cargo test --doc` 会真的把它跑一遍。

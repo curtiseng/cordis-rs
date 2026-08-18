@@ -1,6 +1,6 @@
 [package]
 name = "spatiotemporal-script"
-version = "0.4.0"
+version = "0.5.0"
 description = "把一段 QuickJS 脚本接成时空可组合性演算里的一等 fiber"
 keywords = ["quickjs", "javascript", "plugin", "composability", "agent"]
 categories = ["api-bindings", "rust-patterns"]

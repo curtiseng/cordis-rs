@@ -84,6 +84,28 @@ cargo run -p spatiotemporal-agent -- --creation   # 启动即创造模式
 
 也可 `POST /api/mode`：`{"profile": "creation"}` 或 `{"creation": true}`。
 
+## GitHub Release（开箱即用）
+
+无需本地 Rust 工具链：在 [Releases](https://github.com/zifeng-yang/spatiotemporal/releases) 下载对应平台的 `spatiotemporal-agent-{version}-{target}.tar.gz`（Windows 为 `.zip`），解压后：
+
+```bash
+export DEEPSEEK_API_KEY=sk-你的key
+cd /path/to/your/project          # 工作区 = 启动时的 cwd
+/path/to/spatiotemporal-agent     # 编码：--coding；创造：--creation
+```
+
+包内已含 `cordis.yml`、`assets/`、`plugins/`、`outline.wasm` 等运行时资源；二进制会自动在**同目录**（或 `bin/` 的上一级）查找这些文件。也可用 `SPATIOTEMPORAL_AGENT_HOME` 指向资源目录。
+
+**维护者发版**：打 tag 触发 CI（例如 `git tag v0.5.0 && git push origin v0.5.0`）。本地打包：
+
+```bash
+./spatiotemporal-agent/scripts/build-guests.sh
+cargo build -p spatiotemporal-agent --release
+./spatiotemporal-agent/scripts/package-release.sh
+```
+
+产物在 `spatiotemporal-agent/dist/`。
+
 看到 `打开 http://127.0.0.1:8787` 后，用浏览器打开。默认以**工作区根**（启动时的 cwd；`WORKSPACE` 可覆盖）为 fs/bash 沙箱；右侧为**工作区目录树**。`outline` / `cite` / `stats` 等 demo 工具读工作区 `README.md` 快照；`AGENTS.md` 注入 system prompt。界面底部有**试玩按钮**；完整脚本见 [`DEMO.md`](DEMO.md)。Markdown 渲染依赖 jsDelivr（marked@15 / DOMPurify@3；离线回退纯文本）。
 
 **左栏**：**plugins** = 已挂载 fiber 组件；**tools** = LLM 可调用的函数（native 常一对多，script/wasm 叶子常与插件同名）。完整配置树用创造模式 `inspect_config` 查看。

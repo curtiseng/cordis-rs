@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::sync::OnceLock;
 
 use futures::future::LocalBoxFuture;
 use serde_json::Value;
@@ -363,7 +364,32 @@ pub fn process_caps() -> Rc<spatiotemporal_process::Capabilities> {
     Rc::new(caps)
 }
 
+/// Agent 运行时数据根：cordis、assets、plugins、wasm guest 等相对此目录。
+///
+/// 解析顺序：`SPATIOTEMPORAL_AGENT_HOME` → 可执行文件旁（或 `bin/` 的上一级）→ 开发时的 crate 根。
 pub fn root_dir() -> PathBuf {
+    static ROOT: OnceLock<PathBuf> = OnceLock::new();
+    ROOT.get_or_init(resolve_root_dir).clone()
+}
+
+fn resolve_root_dir() -> PathBuf {
+    if let Ok(home) = std::env::var("SPATIOTEMPORAL_AGENT_HOME") {
+        return PathBuf::from(home);
+    }
+
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(dir) = exe.parent()
+    {
+        if dir.join("cordis.yml").is_file() {
+            return dir.to_path_buf();
+        }
+        if let Some(parent) = dir.parent()
+            && parent.join("cordis.yml").is_file()
+        {
+            return parent.to_path_buf();
+        }
+    }
+
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
 

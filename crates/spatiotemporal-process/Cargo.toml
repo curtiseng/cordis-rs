@@ -1,6 +1,6 @@
 [package]
 name = "spatiotemporal-process"
-version = "0.4.0"
+version = "0.5.0"
 description = "把子进程接成时空可组合性演算里的一等 fiber"
 keywords = ["subprocess", "plugin", "process", "composability", "mcp"]
 categories = ["os", "rust-patterns"]
