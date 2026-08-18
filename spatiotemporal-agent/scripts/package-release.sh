@@ -77,7 +77,11 @@ ARCHIVE="$DIST/${PKG}"
 
 case "$TARGET" in
     *windows*)
-        (cd "$STAGE" && zip -rq "${ARCHIVE}.zip" "$PKG")
+        if command -v zip >/dev/null 2>&1; then
+            (cd "$STAGE" && zip -rq "${ARCHIVE}.zip" "$PKG")
+        else
+            tar -caf "${ARCHIVE}.zip" -C "$STAGE" "$PKG"
+        fi
         echo "产物：${ARCHIVE}.zip"
         ;;
     *)
