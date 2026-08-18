@@ -33,6 +33,16 @@ pub fn default_workspace_root() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("."))
 }
 
+/// 相对路径相对于工作区根（`WORKSPACE` 或 cwd），不是 agent 包目录。
+pub fn resolve_workspace_path(path: &str) -> PathBuf {
+    let candidate = Path::new(path);
+    if candidate.is_absolute() {
+        candidate.to_path_buf()
+    } else {
+        default_workspace_root().join(candidate)
+    }
+}
+
 /// 在 workspace 根目录内解析路径，拒绝逃逸。
 pub fn resolve_within(root: &Path, user_path: &str) -> spatiotemporal::Result<PathBuf> {
     let root = root

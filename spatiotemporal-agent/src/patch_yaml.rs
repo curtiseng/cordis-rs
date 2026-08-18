@@ -1,4 +1,33 @@
-use spatiotemporal::{Entry, Patch, Result};
+use spatiotemporal::{Entry, Patch, Result, parse_patches};
+
+/// 会话 patch 栈（每层对应一次 `push_layer`）的 JSON 持久化。
+pub fn render_layer_stack(layers: &[Vec<Patch>]) -> Result<String> {
+    let value: Vec<Vec<serde_json::Value>> = layers
+        .iter()
+        .map(|layer| layer.iter().map(patch_to_value).collect())
+        .collect();
+    serde_json::to_string_pretty(&value).map_err(|error| {
+        spatiotemporal::Error::Component(format!("session patch JSON 序列化失败：{error}"))
+    })
+}
+
+pub fn parse_layer_stack(text: &str) -> Result<Vec<Vec<Patch>>> {
+    if text.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    let value: Vec<Vec<serde_json::Value>> = serde_json::from_str(text).map_err(|error| {
+        spatiotemporal::Error::Component(format!("session patch JSON 解析失败：{error}"))
+    })?;
+    value
+        .into_iter()
+        .map(|layer| {
+            let yaml = serde_yaml_ng::to_string(&layer).map_err(|error| {
+                spatiotemporal::Error::Component(format!("session patch YAML 转换失败：{error}"))
+            })?;
+            parse_patches(&yaml)
+        })
+        .collect()
+}
 
 /// 把 patch 列表写成可被 `parse_patches` 读回的 YAML。
 pub fn render_patches(patches: &[Patch]) -> Result<String> {
@@ -48,7 +77,34 @@ fn entry_to_value(entry: &Entry) -> serde_json::Value {
 mod tests {
     use spatiotemporal::{Entry, Patch, parse_patches};
 
-    use super::render_patches;
+    use super::{parse_layer_stack, render_layer_stack, render_patches};
+
+    #[test]
+    fn layer_stack_round_trip() {
+        let patches = vec![
+            Patch {
+                id: Some("llm".into()),
+                config: None,
+                disabled: Some(true),
+                insert: None,
+                name: None,
+            },
+            Patch {
+                id: None,
+                config: None,
+                disabled: None,
+                insert: Some(vec![Entry::new("echo", "script").with_config(
+                    serde_json::json!({"file": "plugins/echo.js", "grant": []}),
+                )]),
+                name: None,
+            },
+        ];
+        let layers = vec![patches];
+        let json = render_layer_stack(&layers).expect("render");
+        let parsed = parse_layer_stack(&json).expect("parse");
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].len(), 2);
+    }
 
     #[test]
     fn round_trip_patch_yaml() {

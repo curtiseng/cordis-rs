@@ -1,32 +1,24 @@
-use std::path::{Path, PathBuf};
+use std::cell::RefCell;
+use std::path::PathBuf;
 use std::rc::Rc;
 
 use futures::future::LocalBoxFuture;
-use spatiotemporal::{Component, Context, Result, Steps, Value};
+use spatiotemporal::{Component, Context, Result, Steps};
 
 use crate::host::Shell;
-use crate::util::workspace_root;
 
-/// 本地插件：把工作区内的 shell 执行挂到 `shell` 键上。
+/// 本地插件：把工作区内的 shell 执行挂到 `shell` 键上（运行时可切换）。
 pub struct BashSandbox {
-    pub root: PathBuf,
+    pub root: Rc<RefCell<PathBuf>>,
 }
 
-impl BashSandbox {
-    pub fn from_config(config: &Value) -> Self {
-        BashSandbox {
-            root: workspace_root(config),
-        }
-    }
+struct SharedShell {
+    root: Rc<RefCell<PathBuf>>,
 }
 
-struct LocalShell {
-    root: PathBuf,
-}
-
-impl Shell for LocalShell {
-    fn root(&self) -> &Path {
-        &self.root
+impl Shell for SharedShell {
+    fn root(&self) -> PathBuf {
+        self.root.borrow().clone()
     }
 }
 
@@ -38,7 +30,7 @@ impl Component for BashSandbox {
     fn apply(&self, ctx: Context, _steps: Steps) -> LocalBoxFuture<'_, Result<()>> {
         let root = self.root.clone();
         Box::pin(async move {
-            ctx.set::<crate::keys::ShellKey>(Rc::new(LocalShell { root }) as Rc<dyn Shell>);
+            ctx.set::<crate::keys::ShellKey>(Rc::new(SharedShell { root }) as Rc<dyn Shell>);
             Ok(())
         })
     }

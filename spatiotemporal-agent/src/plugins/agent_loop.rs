@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 use spatiotemporal::{Component, Context, KeyId, Result, Steps, Value as StValue};
 
 use crate::chat::{Turn, TurnRequest, finish};
-use crate::compaction::{CompactionConfig, compact};
+use crate::compaction::{CompactionConfig, compact, repair_tool_messages};
 use crate::host::{AgentLoop, SystemPrompt};
 use crate::keys::{AgentLoopKey, PromptKey};
 
@@ -21,7 +21,7 @@ impl AgentLoopPlugin {
             max_rounds: config
                 .get("max_rounds")
                 .and_then(StValue::as_u64)
-                .unwrap_or(12) as usize,
+                .unwrap_or(50) as usize,
             compaction: CompactionConfig::from_config(config),
         }
     }
@@ -109,7 +109,7 @@ fn run_loop(
         let round = round_idx + 1;
         let mut body = json!({
             "model": llm.model(),
-            "messages": messages,
+            "messages": sanitize_messages(&messages),
         });
         if !schemas.is_empty() {
             body["tools"] = json!(schemas);
@@ -151,7 +151,7 @@ fn run_loop(
                     output: String::new(),
                 });
             }
-            messages.push(message.clone());
+            messages.push(sanitize_message(&message));
             for call in calls {
                 let name = call["function"]["name"].as_str().unwrap_or("").to_owned();
                 let arguments = call["function"]["arguments"]
@@ -197,9 +197,33 @@ fn run_loop(
             .as_str()
             .unwrap_or("（模型没有返回文本）")
             .to_owned();
-        messages.push(message);
+        messages.push(sanitize_message(&message));
         return finish(messages, reply, traces, steps);
     }
 
     finish(messages, "工具调用轮次用尽了。".into(), traces, steps)
+}
+
+/// DeepSeek 不接受回传 `reasoning_content` 与 tool_calls 里的 `index`。
+fn sanitize_message(message: &Value) -> Value {
+    let mut out = message.clone();
+    let Some(obj) = out.as_object_mut() else {
+        return out;
+    };
+    obj.remove("reasoning_content");
+    if let Some(calls) = obj.get_mut("tool_calls").and_then(Value::as_array_mut) {
+        for call in calls {
+            if let Some(call_obj) = call.as_object_mut() {
+                call_obj.remove("index");
+            }
+        }
+    }
+    out
+}
+
+fn sanitize_messages(messages: &[Value]) -> Vec<Value> {
+    repair_tool_messages(messages)
+        .iter()
+        .map(sanitize_message)
+        .collect()
 }

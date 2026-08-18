@@ -87,7 +87,13 @@ impl DeepSeek {
             .timeout(std::time::Duration::from_secs(120))
             .send_json(body)
             .map_err(|error| {
-                spatiotemporal::Error::Component(format!("DeepSeek 请求失败：{error}"))
+                spatiotemporal::Error::Component(match error {
+                    ureq::Error::Status(code, response) => {
+                        let body = response.into_string().unwrap_or_default();
+                        format!("DeepSeek 请求失败：{url}: status code {code} — {body}")
+                    }
+                    other => format!("DeepSeek 请求失败：{url}: {other}"),
+                })
             })?;
         response.into_string().map_err(|error| {
             spatiotemporal::Error::Component(format!("DeepSeek 响应读取失败：{error}"))

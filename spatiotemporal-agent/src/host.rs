@@ -26,12 +26,12 @@ pub trait Llm {
 
 /// 工作区文件系统（路径限制在 root 内）。
 pub trait Fs {
-    fn root(&self) -> &Path;
+    fn root(&self) -> PathBuf;
 }
 
 /// Shell 执行（cwd 限制在 root 内）。
 pub trait Shell {
-    fn root(&self) -> &Path;
+    fn root(&self) -> PathBuf;
 }
 
 /// 界面。`apply` 只把实现挂到 `surface` 上；真正跑起来是宿主 `run` 的事。
@@ -249,6 +249,9 @@ impl spatiotemporal_wasm::ToolHost for Toolbox {
     fn unregister(&self, name: &str) {
         self.remove(name);
     }
+    fn call_tool(&self, name: &str, args: &str) -> Result<String> {
+        self.call(name, args)
+    }
 }
 
 impl spatiotemporal_script::ToolHost for Toolbox {
@@ -263,6 +266,9 @@ impl spatiotemporal_script::ToolHost for Toolbox {
     fn unregister(&self, name: &str) {
         self.remove(name);
     }
+    fn call_tool(&self, name: &str, args: &str) -> Result<String> {
+        self.call(name, args)
+    }
 }
 
 impl spatiotemporal_process::ToolHost for Toolbox {
@@ -276,6 +282,9 @@ impl spatiotemporal_process::ToolHost for Toolbox {
     }
     fn unregister(&self, name: &str) {
         self.remove(name);
+    }
+    fn call_tool(&self, name: &str, args: &str) -> Result<String> {
+        self.call(name, args)
     }
 }
 

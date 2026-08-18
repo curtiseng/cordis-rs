@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::mpsc::Receiver;
 
@@ -15,6 +15,8 @@ use crate::keys::{AgentLoopKey, Doc, FsKey, LlmKey, SurfaceKey};
 use crate::plugins::patch_watcher::{drain_reload, reload_patch_file};
 use crate::runtime::{AgentProfile, AgentRuntime};
 use crate::session;
+use crate::workspace;
+use crate::workspace_store::WorkspaceStore;
 
 const INDEX: &str = include_str!("../../assets/index.html");
 
@@ -27,6 +29,7 @@ pub struct Web {
     pub runtime: Rc<AgentRuntime>,
     pub reload_rx: Rc<RefCell<Option<Receiver<()>>>>,
     pub patch_path: PathBuf,
+    pub workspaces: Rc<WorkspaceStore>,
 }
 
 struct WebSurface {
@@ -36,7 +39,7 @@ struct WebSurface {
     llm: Rc<dyn Llm>,
     agent_loop: Rc<dyn AgentLoop>,
     doc: Rc<dyn Document>,
-    workspace: String,
+    workspaces: Rc<WorkspaceStore>,
     approvals: ApprovalQueue,
     runtime: Rc<AgentRuntime>,
     reload_rx: Rc<RefCell<Option<Receiver<()>>>>,
@@ -50,8 +53,9 @@ impl Surface for WebSurface {
 
     fn run(&self) {
         let port = self.port;
-        println!("文档：{}", self.doc.path());
-        println!("工作区：{}", self.workspace);
+        let workspace = self.workspaces.current();
+        println!("工作区：{}", workspace.display());
+        println!("markdown 快照：{}", self.doc.path());
         println!("打开 http://127.0.0.1:{port}");
         serve(ServeContext {
             port,
@@ -60,7 +64,7 @@ impl Surface for WebSurface {
             llm: &*self.llm,
             agent_loop: &*self.agent_loop,
             doc: &*self.doc,
-            workspace: &self.workspace,
+            workspaces: self.workspaces.clone(),
             approvals: &self.approvals,
             runtime: &self.runtime,
             reload_rx: self.reload_rx.clone(),
@@ -97,7 +101,7 @@ impl Component for Web {
             let llm = ctx.resolve::<LlmKey>()?;
             let agent_loop = ctx.resolve::<AgentLoopKey>()?;
             let fs = ctx.resolve::<FsKey>()?;
-            let workspace = fs.root().display().to_string();
+            let _ = fs.root();
             let surface: Rc<dyn Surface> = Rc::new(WebSurface {
                 port,
                 tools,
@@ -105,7 +109,7 @@ impl Component for Web {
                 llm,
                 agent_loop,
                 doc,
-                workspace,
+                workspaces: self.workspaces.clone(),
                 approvals,
                 runtime,
                 reload_rx,
@@ -124,7 +128,7 @@ struct ServeContext<'a> {
     llm: &'a dyn Llm,
     agent_loop: &'a dyn AgentLoop,
     doc: &'a dyn Document,
-    workspace: &'a str,
+    workspaces: Rc<WorkspaceStore>,
     approvals: &'a ApprovalQueue,
     runtime: &'a AgentRuntime,
     reload_rx: Rc<RefCell<Option<Receiver<()>>>>,
@@ -140,19 +144,20 @@ fn serve(ctx: ServeContext<'_>) {
         llm,
         agent_loop,
         doc,
-        workspace,
+        workspaces,
         approvals,
         runtime,
         reload_rx,
         patch_path,
         kind,
     } = ctx;
-    let workspace_path = Path::new(workspace);
     let server = Server::http(("127.0.0.1", port)).unwrap_or_else(|error| {
         panic!("听不了 {port}：{error}");
     });
 
     for mut request in server.incoming_requests() {
+        let workspace_path = workspaces.current();
+        let workspace = workspace_path.display().to_string();
         if let Some(rx) = reload_rx.borrow().as_ref() {
             drain_reload(runtime, patch_path.as_path(), rx);
         }
@@ -168,6 +173,7 @@ fn serve(ctx: ServeContext<'_>) {
                 let pending = approvals.pending_all();
                 let policy = approvals.policy();
                 json_ok(json!({
+                    "markdown_snapshot": doc.path(),
                     "doc": doc.path(),
                     "model": llm.model(),
                     "has_key": std::env::var("DEEPSEEK_API_KEY").is_ok(),
@@ -176,6 +182,7 @@ fn serve(ctx: ServeContext<'_>) {
                     "creation": profile == AgentProfile::Creation,
                     "coding": profile == AgentProfile::Coding,
                     "workspace": workspace,
+                    "active_session": runtime.active_session_id(),
                     "pending": pending,
                     "pending_count": pending.len(),
                     "approval_policy": {
@@ -194,13 +201,16 @@ fn serve(ctx: ServeContext<'_>) {
                     })).collect::<Vec<_>>(),
                 }))
             }
-            (Method::Get, "/api/sessions") => match session::list_sessions(workspace_path) {
+            (Method::Get, "/api/sessions") => match session::list_sessions(&workspace_path) {
                 Ok(sessions) => json_ok(json!({ "sessions": sessions })),
                 Err(error) => json_err(500, &error.to_string()),
             },
             (Method::Post, "/api/session") => {
                 let id = session::new_session_id();
-                json_ok(json!({ "session_id": id }))
+                match runtime.activate_session(&workspace_path, &id) {
+                    Ok(_) => json_ok(json!({ "session_id": id })),
+                    Err(error) => json_err(500, &error.to_string()),
+                }
             }
             (Method::Get, "/api/session") => {
                 let session_id = query.get("session_id").cloned().unwrap_or_default();
@@ -209,17 +219,33 @@ fn serve(ctx: ServeContext<'_>) {
                 } else if !session::valid_session_id(&session_id) {
                     json_err(400, "非法 session_id")
                 } else {
-                    match session::derive_messages(workspace_path, &session_id) {
-                        Ok(history) => {
-                            let events = session::derive_events(workspace_path, &session_id)
-                                .unwrap_or_default();
-                            json_ok(json!({
-                                "session_id": session_id,
-                                "history": history,
-                                "events": events,
-                            }))
-                        }
+                    let activate = runtime.activate_session(&workspace_path, &session_id);
+                    match activate {
                         Err(error) => json_err(500, &error.to_string()),
+                        Ok(_) => match session::derive_messages(&workspace_path, &session_id) {
+                            Ok(history) => {
+                                let events = session::derive_events(&workspace_path, &session_id)
+                                    .unwrap_or_default();
+                                json_ok(json!({
+                                    "session_id": session_id,
+                                    "history": history,
+                                    "events": events,
+                                }))
+                            }
+                            Err(error) => json_err(500, &error.to_string()),
+                        },
+                    }
+                }
+            }
+            (Method::Delete, "/api/session") => {
+                let session_id = query.get("session_id").cloned().unwrap_or_default();
+                if session_id.is_empty() {
+                    json_err(400, "缺少 session_id")
+                } else {
+                    match session::delete_session(&workspace_path, &session_id) {
+                        Ok(true) => json_ok(json!({ "ok": true })),
+                        Ok(false) => json_err(404, "session 不存在"),
+                        Err(error) => json_err(400, &error.to_string()),
                     }
                 }
             }
@@ -235,12 +261,21 @@ fn serve(ctx: ServeContext<'_>) {
                 let id = payload["id"].as_str();
                 let reason = payload["reason"].as_str();
                 let result = if approve {
-                    approvals.approve(runtime, id)
+                    approvals.approve(runtime, &workspace_path, id)
                 } else {
                     approvals.reject(id, reason)
                 };
                 match result {
-                    Ok(message) => json_ok(json!({ "ok": true, "message": message })),
+                    Ok(message) => {
+                        if approve
+                            && let Some(current) = payload["session_id"].as_str()
+                            && !current.is_empty()
+                            && session::valid_session_id(current)
+                        {
+                            let _ = runtime.activate_session(&workspace_path, current);
+                        }
+                        json_ok(json!({ "ok": true, "message": message }))
+                    }
                     Err(error) => json_err(400, &error.to_string()),
                 }
             }
@@ -313,6 +348,44 @@ fn serve(ctx: ServeContext<'_>) {
                 "path": doc.path(),
                 "text": doc.text(),
             })),
+            (Method::Get, "/api/workspaces") => {
+                json_ok(serde_json::to_value(workspaces.list()).unwrap_or(json!({})))
+            }
+            (Method::Post, "/api/workspaces/switch") => {
+                let mut body = String::new();
+                let _ = request.as_reader().read_to_string(&mut body);
+                let payload: Value = serde_json::from_str(&body).unwrap_or(json!({}));
+                let path = payload["path"].as_str().unwrap_or("").trim();
+                if path.is_empty() {
+                    json_err(400, "缺少 path")
+                } else {
+                    match workspaces.switch(path) {
+                        Ok(next) => json_ok(json!({
+                            "ok": true,
+                            "workspace": next.display().to_string(),
+                        })),
+                        Err(error) => json_err(400, &error),
+                    }
+                }
+            }
+            (Method::Get, "/api/workspace/list") => {
+                let rel = query.get("path").map(String::as_str).unwrap_or("");
+                match workspace::list_dir(&workspace_path, rel) {
+                    Ok(listing) => json_ok(serde_json::to_value(listing).unwrap_or(json!({}))),
+                    Err(error) => json_err(400, &error.to_string()),
+                }
+            }
+            (Method::Get, "/api/workspace/file") => {
+                let rel = query.get("path").cloned().unwrap_or_default();
+                if rel.trim().is_empty() {
+                    json_err(400, "缺少 path")
+                } else {
+                    match workspace::read_file(&workspace_path, &rel) {
+                        Ok(file) => json_ok(serde_json::to_value(file).unwrap_or(json!({}))),
+                        Err(error) => json_err(400, &error.to_string()),
+                    }
+                }
+            }
             (Method::Post, "/api/chat") => {
                 let mut body = String::new();
                 let _ = request.as_reader().read_to_string(&mut body);
@@ -328,9 +401,11 @@ fn serve(ctx: ServeContext<'_>) {
                     json_err(400, "非法 session_id")
                 } else if user.is_empty() {
                     json_err(400, "空消息")
+                } else if let Err(error) = runtime.activate_session(&workspace_path, &session_id) {
+                    json_err(500, &error.to_string())
                 } else {
                     let mut prior =
-                        session::derive_messages(workspace_path, &session_id).unwrap_or_default();
+                        session::derive_messages(&workspace_path, &session_id).unwrap_or_default();
                     if prior.is_empty() && !client_history.is_empty() {
                         prior = client_history;
                     }
@@ -339,7 +414,7 @@ fn serve(ctx: ServeContext<'_>) {
                     let mut turn = agent_loop.run_turn(TurnRequest {
                         llm,
                         tools,
-                        workspace,
+                        workspace: &workspace,
                         doc_path: Some(&doc.path()),
                         profile,
                         user: &user,
@@ -348,7 +423,7 @@ fn serve(ctx: ServeContext<'_>) {
                     turn.session_id = Some(session_id.clone());
                     if turn.history.len() > prev_len {
                         let _ = session::append_messages(
-                            workspace_path,
+                            &workspace_path,
                             &session_id,
                             &turn.history[prev_len..],
                         );
@@ -359,7 +434,7 @@ fn serve(ctx: ServeContext<'_>) {
                             "kind": "turn_steps",
                             "steps": turn.steps,
                         });
-                        let _ = session::append_message(workspace_path, &session_id, &event);
+                        let _ = session::append_message(&workspace_path, &session_id, &event);
                     }
                     json_ok(serde_json::to_value(turn).unwrap_or(json!({})))
                 }
@@ -379,10 +454,39 @@ fn parse_query(url: &str) -> std::collections::HashMap<String, String> {
     for pair in query.split('&') {
         let mut parts = pair.splitn(2, '=');
         if let (Some(key), Some(value)) = (parts.next(), parts.next()) {
-            map.insert(key.to_owned(), value.to_owned());
+            map.insert(decode_query_component(key), decode_query_component(value));
         }
     }
     map
+}
+
+fn decode_query_component(input: &str) -> String {
+    let bytes = input.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        match bytes[index] {
+            b'+' => {
+                out.push(b' ');
+                index += 1;
+            }
+            b'%' if index + 2 < bytes.len() => {
+                let hex = std::str::from_utf8(&bytes[index + 1..index + 3]).unwrap_or("");
+                if let Ok(byte) = u8::from_str_radix(hex, 16) {
+                    out.push(byte);
+                    index += 3;
+                    continue;
+                }
+                out.push(bytes[index]);
+                index += 1;
+            }
+            byte => {
+                out.push(byte);
+                index += 1;
+            }
+        }
+    }
+    String::from_utf8(out).unwrap_or_else(|_| input.to_owned())
 }
 
 fn html(body: &str) -> Response<std::io::Cursor<Vec<u8>>> {
@@ -407,4 +511,18 @@ fn json_status(code: u16, value: Value) -> Response<std::io::Cursor<Vec<u8>>> {
         response = response.with_header(header);
     }
     response
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_query_decodes_path_segments() {
+        let query = parse_query("/api/workspace/list?path=crates%2Fspatiotemporal-process");
+        assert_eq!(
+            query.get("path").map(String::as_str),
+            Some("crates/spatiotemporal-process")
+        );
+    }
 }

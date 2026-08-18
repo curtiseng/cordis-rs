@@ -22,6 +22,7 @@ use crate::plugins::{
 };
 use crate::runtime::AgentRuntime;
 use crate::util::default_workspace_root;
+use crate::workspace_store::WorkspaceStore;
 
 #[derive(Clone)]
 pub struct Host {
@@ -38,16 +39,18 @@ pub struct Host {
     pub reload_tx: Rc<RefCell<Option<Sender<()>>>>,
     pub reload_rx: Rc<RefCell<Option<Receiver<()>>>>,
     pub patch_path: Rc<RefCell<PathBuf>>,
+    pub workspaces: Rc<WorkspaceStore>,
 }
 
 impl Host {
     pub fn new() -> Self {
         let installer = Rc::new(LlmInstaller);
         let (reload_tx, reload_rx) = std::sync::mpsc::channel();
+        let workspaces = WorkspaceStore::new(default_workspace_root());
         Host {
             tools: Toolbox::new(),
             roster: Roster::new(),
-            approvals: ApprovalQueue::new(default_workspace_root()),
+            approvals: ApprovalQueue::new(workspaces.current()),
             wasm_caps: wasm_caps(),
             script_caps: script_caps(),
             process_caps: process_caps(),
@@ -58,6 +61,7 @@ impl Host {
             reload_tx: Rc::new(RefCell::new(Some(reload_tx))),
             reload_rx: Rc::new(RefCell::new(Some(reload_rx))),
             patch_path: Rc::new(RefCell::new(root_dir().join("cordis.patch.yml"))),
+            workspaces,
         }
     }
 }
@@ -68,8 +72,14 @@ pub fn registry(host: Host) -> Registry {
     {
         let host = host.clone();
         registry.add("fs-sandbox", move |config: &Value| {
+            if config.get("root").and_then(Value::as_str).is_some() {
+                let initial = crate::util::workspace_root(config);
+                *host.workspaces.handle().borrow_mut() = initial;
+            }
             Ok(announce(
-                Rc::new(FsSandbox::from_config(config)),
+                Rc::new(FsSandbox {
+                    root: host.workspaces.handle(),
+                }),
                 host.roster.clone(),
                 "native",
                 "提供 fs（工作区沙箱）",
@@ -83,6 +93,7 @@ pub fn registry(host: Host) -> Registry {
             Ok(announce(
                 Rc::new(ToolFs {
                     tools: host.tools.clone(),
+                    workspace: host.workspaces.handle(),
                 }),
                 host.roster.clone(),
                 "native",
@@ -94,8 +105,14 @@ pub fn registry(host: Host) -> Registry {
     {
         let host = host.clone();
         registry.add("bash-sandbox", move |config: &Value| {
+            if config.get("root").and_then(Value::as_str).is_some() {
+                let initial = crate::util::workspace_root(config);
+                *host.workspaces.handle().borrow_mut() = initial;
+            }
             Ok(announce(
-                Rc::new(BashSandbox::from_config(config)),
+                Rc::new(BashSandbox {
+                    root: host.workspaces.handle(),
+                }),
                 host.roster.clone(),
                 "native",
                 "提供 shell（工作区沙箱）",
@@ -109,6 +126,7 @@ pub fn registry(host: Host) -> Registry {
             Ok(announce(
                 Rc::new(ToolBash {
                     tools: host.tools.clone(),
+                    workspace: host.workspaces.handle(),
                 }),
                 host.roster.clone(),
                 "native",
@@ -160,7 +178,7 @@ pub fn registry(host: Host) -> Registry {
         registry.add("doc", move |config: &Value| {
             let path = config_str(config, "path")
                 .ok_or_else(|| Error::Config("doc 需要 config.path".into()))?;
-            let path = resolve_path(path);
+            let path = crate::util::resolve_workspace_path(path);
             let plugin = DocFile::open(&path)
                 .map_err(|error| Error::Config(format!("读不了 {}：{error}", path.display())))?;
             Ok(announce(
@@ -225,6 +243,7 @@ pub fn registry(host: Host) -> Registry {
                     runtime,
                     reload_rx: host.reload_rx.clone(),
                     patch_path: host.patch_path.borrow().clone(),
+                    workspaces: host.workspaces.clone(),
                 }),
                 host.roster.clone(),
                 "native",

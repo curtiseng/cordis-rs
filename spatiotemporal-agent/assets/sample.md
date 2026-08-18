@@ -32,10 +32,12 @@
 
 ## 四种基质
 
-- **native**：编译进宿主，`fs` / `shell` / HTTP / Web UI。
-- **wasm**：`outline.wasm`，能力面由 WIT 钉死。
-- **script**：`cite.js`、`stats.js` 等字符串 guest，适合快速试验。
+- **native**：编译进宿主，`fs` / `shell` / HTTP / Web UI；LLM 通过 `read` / `bash` 等 tool 使用 IO。
+- **wasm**：`outline.wasm`，能力面由 WIT 钉死；叶子内可用 **`call-tool`** 桥接宿主工具表。
+- **script**：`cite.js`、`stats.js` 等字符串 guest；叶子内可用 **`host.callTool(name, argsJson)`** 桥接宿主工具表（与 LLM 调 tool 同路径）。
 - **process**：`spatiotemporal-process` crate（NDJSON stdio），MCP 桥接用；默认可执行文件需另编 guest。
+
+**grant 与桥接**：demo 里 script/wasm 通常只 `grant: [markdown]`（读当前文档快照）。**不要**给 guest grant `fs`/`shell`——需要读文件或跑命令时，由 LLM 直接调 native tool，或在 define_script 的叶子代码里 `callTool`。
 
 ## 惯性
 
@@ -71,7 +73,9 @@ cargo test -p spatiotemporal-agent -- stats compaction approval 2>/dev/null | ta
 
 ## Session 与 compaction
 
-多轮对话写入 `.agent/sessions/*.jsonl`。上下文过长时 `agent-loop` 按 `cordis.yml` 的 `compaction` 截断 tool 输出并保留最近消息。
+多轮对话写入 `.agent/sessions/*.jsonl`。上下文过长时 `agent-loop` 按 `cordis.yml` 的 `compaction` 截断 tool 输出并保留最近消息（轮次上限见 `max_rounds`）。
+
+**操作建议**：代码任务用编码模式；history 过长或 LLM 报 tool 消息格式错误时**新开会话**，避免在压缩后的脏 history 上继续硬聊。
 
 ## 创造模式试玩
 

@@ -1,11 +1,22 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
 use spatiotemporal::{Context, Error, Key, KeyId, KeyRegistry, Result};
 use wasmtime::component::ResourceTable;
 use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 
+use crate::ToolHost;
 use crate::bindings::composability::plugin::host::Host;
+
+thread_local! {
+    static TOOL_BRIDGE: RefCell<Option<Rc<dyn ToolHost>>> = const { RefCell::new(None) };
+}
+
+pub(crate) fn set_tool_bridge(host: Option<Rc<dyn ToolHost>>) {
+    TOOL_BRIDGE.with(|slot| *slot.borrow_mut() = host);
+}
 
 /// 「从上下文里取出一项能力，并投影成 guest 收得下的形状」。
 type Projection = Box<dyn Fn(&Context) -> Result<String>>;
@@ -160,5 +171,15 @@ impl Host for HostState {
         if let Ok(mut pending) = self.pending_llm.lock() {
             *pending = Some(model);
         }
+    }
+
+    fn call_tool(&mut self, name: String, args: String) -> std::result::Result<String, String> {
+        TOOL_BRIDGE.with(|slot| {
+            slot.borrow()
+                .as_ref()
+                .ok_or_else(|| "宿主未接 tool 桥接".to_string())?
+                .call_tool(&name, &args)
+                .map_err(|error| error.to_string())
+        })
     }
 }

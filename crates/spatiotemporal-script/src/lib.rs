@@ -14,7 +14,7 @@
 //!
 //! wasm 的 guest 是编译好的 `.wasm` 文件；脚本的 guest 是**字符串**——这正是
 //! 「模型这一轮现写一段代码」那条自进化路径。能力面是同一张形状：宿主注入
-//! `host.log` / `host.capability`，guest 导出 `load` / `unload`。
+//! `host.log` / `host.capability` / `host.callTool`，guest 导出 `load` / `unload`。
 //!
 //! # 内核为此让出的三处
 //!
@@ -44,6 +44,12 @@ pub use host::Capabilities;
 pub trait ToolHost: 'static {
     fn register(&self, name: String, description: String, invoke: ToolInvoke);
     fn unregister(&self, name: &str);
+    /// 桥接宿主工具表；未接时 guest 调 `callTool` 会失败。
+    fn call_tool(&self, _name: &str, _args: &str) -> spatiotemporal::Result<String> {
+        Err(spatiotemporal::Error::Component(
+            "宿主未接 tool 桥接".into(),
+        ))
+    }
 }
 
 /// 调一个脚本工具：参数和返回值都是字符串（通常是 JSON）。

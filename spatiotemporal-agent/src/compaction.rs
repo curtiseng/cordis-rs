@@ -67,23 +67,61 @@ pub fn compact(messages: &[Value], config: &CompactionConfig) -> (Vec<Value>, Co
         .collect();
 
     if out.len() <= config.max_messages && message_chars(&out) <= config.max_chars {
-        return (out, report);
+        return (repair_tool_messages(&out), report);
     }
 
     let keep = config.keep_recent.max(1).min(out.len());
     let dropped = out.len().saturating_sub(keep);
     if dropped == 0 {
-        return (out, report);
+        return (repair_tool_messages(&out), report);
     }
 
-    let tail: Vec<Value> = out.split_off(out.len() - keep);
+    let mut tail: Vec<Value> = out.split_off(out.len() - keep);
+    tail = repair_tool_messages(&tail);
     report.dropped_messages = dropped;
     let mut compacted = vec![serde_json::json!({
         "role": "assistant",
         "content": format!("（较早的 {dropped} 条消息已压缩省略，仅保留最近 {keep} 条。）")
     })];
     compacted.extend(tail);
-    (compacted, report)
+    (repair_tool_messages(&compacted), report)
+}
+
+/// 去掉没有对应 assistant `tool_calls` 的孤儿 tool 消息（compaction 截断后常见）。
+pub fn repair_tool_messages(messages: &[Value]) -> Vec<Value> {
+    let mut out = Vec::with_capacity(messages.len());
+    for message in messages {
+        if message.get("role").and_then(Value::as_str) == Some("tool") {
+            let Some(id) = message.get("tool_call_id").and_then(Value::as_str) else {
+                continue;
+            };
+            if !has_tool_call_parent(&out, id) {
+                continue;
+            }
+        }
+        out.push(message.clone());
+    }
+    out
+}
+
+fn has_tool_call_parent(messages: &[Value], tool_call_id: &str) -> bool {
+    for message in messages.iter().rev() {
+        match message.get("role").and_then(Value::as_str) {
+            Some("tool") => continue,
+            Some("assistant") => {
+                return message
+                    .get("tool_calls")
+                    .and_then(Value::as_array)
+                    .is_some_and(|calls| {
+                        calls.iter().any(|call| {
+                            call.get("id").and_then(Value::as_str) == Some(tool_call_id)
+                        })
+                    });
+            }
+            _ => return false,
+        }
+    }
+    false
 }
 
 fn truncate_tool_message(
@@ -127,18 +165,28 @@ mod tests {
 
     #[test]
     fn truncates_long_tool_output() {
-        let messages = vec![json!({
-            "role": "tool",
-            "tool_call_id": "1",
-            "content": "x".repeat(20_000)
-        })];
+        let messages = vec![
+            json!({
+                "role": "assistant",
+                "tool_calls": [{
+                    "id": "1",
+                    "type": "function",
+                    "function": { "name": "bash", "arguments": "{}" }
+                }]
+            }),
+            json!({
+                "role": "tool",
+                "tool_call_id": "1",
+                "content": "x".repeat(20_000)
+            }),
+        ];
         let config = CompactionConfig {
             max_tool_chars: 100,
             ..CompactionConfig::default()
         };
         let (out, report) = compact(&messages, &config);
         assert_eq!(report.truncated_tools, 1);
-        assert!(out[0]["content"].as_str().unwrap().contains("已截断"));
+        assert!(out[1]["content"].as_str().unwrap().contains("已截断"));
     }
 
     #[test]
@@ -157,5 +205,72 @@ mod tests {
         assert_eq!(out.len(), 4);
         assert!(out[0]["content"].as_str().unwrap().contains("压缩省略"));
         assert_eq!(out[1]["content"], "m7");
+    }
+
+    #[test]
+    fn drops_orphan_tool_after_compaction() {
+        let messages: Vec<Value> = (0..8)
+            .map(|index| {
+                if index % 3 == 1 {
+                    json!({
+                        "role": "assistant",
+                        "tool_calls": [{
+                            "id": format!("call_{index}"),
+                            "type": "function",
+                            "function": { "name": "bash", "arguments": "{}" }
+                        }]
+                    })
+                } else if index % 3 == 2 {
+                    json!({
+                        "role": "tool",
+                        "tool_call_id": format!("call_{}", index - 1),
+                        "content": "ok"
+                    })
+                } else {
+                    json!({ "role": "user", "content": format!("m{index}") })
+                }
+            })
+            .collect();
+        let config = CompactionConfig {
+            max_messages: 4,
+            keep_recent: 3,
+            max_chars: usize::MAX,
+            max_tool_chars: usize::MAX,
+        };
+        let (out, report) = compact(&messages, &config);
+        assert_eq!(report.dropped_messages, 5);
+        assert!(
+            out.windows(2).all(|pair| {
+                pair[1].get("role").and_then(Value::as_str) != Some("tool")
+                    || has_tool_parent_in_slice(pair)
+            }),
+            "compacted history must not start with orphan tool messages"
+        );
+    }
+
+    fn has_tool_parent_in_slice(pair: &[Value]) -> bool {
+        pair[1].get("role").and_then(Value::as_str) != Some("tool")
+            || pair[0]
+                .get("tool_calls")
+                .and_then(Value::as_array)
+                .is_some_and(|calls| {
+                    calls.iter().any(|call| {
+                        call.get("id").and_then(Value::as_str)
+                            == pair[1].get("tool_call_id").and_then(Value::as_str)
+                    })
+                })
+    }
+
+    #[test]
+    fn repair_drops_orphan_tools() {
+        let messages = vec![
+            json!({ "role": "assistant", "content": "summary" }),
+            json!({ "role": "tool", "tool_call_id": "missing", "content": "orphan" }),
+            json!({ "role": "user", "content": "next" }),
+        ];
+        let out = repair_tool_messages(&messages);
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0]["role"], "assistant");
+        assert_eq!(out[1]["role"], "user");
     }
 }

@@ -1,8 +1,11 @@
 use std::collections::HashMap;
+use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
 use rquickjs::{Ctx, Exception, Function, Object};
 use spatiotemporal::{Context, Error, Key, KeyId, KeyRegistry, Result};
+
+use crate::ToolHost;
 
 /// 「从上下文里取出一项能力，并投影成 guest 收得下的形状」。
 type Projection = Box<dyn Fn(&Context) -> Result<String>>;
@@ -83,13 +86,15 @@ impl Capabilities {
     }
 }
 
-/// 把 `host.log` / `host.capability` / `host.registerTool` / `host.registerLlm` 挂到全局。
+/// 把 `host.log` / `host.capability` / `host.registerTool` / `host.registerLlm` /
+/// `host.callTool` 挂到全局。
 pub(crate) fn install_host<'js>(
     ctx: Ctx<'js>,
     view: HashMap<String, String>,
     logs: Arc<Mutex<Vec<String>>>,
     pending_tools: Arc<Mutex<Vec<(String, String)>>>,
     pending_llm: Arc<Mutex<Option<String>>>,
+    tools: Option<Rc<dyn ToolHost>>,
 ) -> rquickjs::Result<()> {
     let tools_table = Object::new(ctx.clone())?;
     ctx.globals().set("__tools", tools_table)?;
@@ -135,6 +140,22 @@ pub(crate) fn install_host<'js>(
             let pending_llm = pending_llm.clone();
             move |ctx, model, func| stash_llm(ctx, &pending_llm, model, func)
         })?,
+    )?;
+
+    host.set(
+        "callTool",
+        Function::new(
+            ctx.clone(),
+            move |js_ctx: Ctx<'_>, name: String, args: String| {
+                let Some(host) = tools.as_ref() else {
+                    return Err(Exception::throw_message(&js_ctx, "宿主未接 tool 桥接"));
+                };
+                match host.call_tool(&name, &args) {
+                    Ok(text) => Ok(text),
+                    Err(error) => Err(Exception::throw_message(&js_ctx, &error.to_string())),
+                }
+            },
+        )?,
     )?;
 
     ctx.globals().set("host", host)

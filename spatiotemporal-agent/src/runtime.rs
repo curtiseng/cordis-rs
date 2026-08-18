@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use spatiotemporal::{App, Applied, Context, Entry, Loader, Patch, Result, compose, parse_patches};
 
 use crate::host::root_dir;
+use crate::session;
 
 /// 运行时互斥配置档：标准 / 编码 / 创造。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
@@ -38,8 +39,10 @@ pub struct AgentRuntime {
     profile: RefCell<AgentProfile>,
     /// 来自 `cordis.patch.yml` 的文件层（可热重载）。
     file_layer: RefCell<Option<Vec<Patch>>>,
-    /// 运行时 `push_layer` / `run_patch` 追加的层。
-    dynamic_layers: RefCell<Vec<Vec<Patch>>>,
+    /// 当前激活会话的 patch 层栈（持久化到 `.agent/sessions/{id}.patch.json`）。
+    session_layers: RefCell<Vec<Vec<Patch>>>,
+    active_session: RefCell<Option<String>>,
+    session_workspace: RefCell<Option<PathBuf>>,
     coding_patch_path: PathBuf,
     creation_patch_path: PathBuf,
 }
@@ -59,7 +62,9 @@ impl AgentRuntime {
             mode_layer: RefCell::new(None),
             profile: RefCell::new(AgentProfile::Standard),
             file_layer: RefCell::new(None),
-            dynamic_layers: RefCell::new(Vec::new()),
+            session_layers: RefCell::new(Vec::new()),
+            active_session: RefCell::new(None),
+            session_workspace: RefCell::new(None),
             coding_patch_path: root_dir().join("cordis.coding.yml"),
             creation_patch_path: root_dir().join("cordis.creation.yml"),
         }
@@ -80,8 +85,18 @@ impl AgentRuntime {
         &self.bootstrap_layers
     }
 
-    pub fn dynamic_layers(&self) -> Vec<Vec<Patch>> {
-        self.dynamic_layers.borrow().clone()
+    pub fn session_layers(&self) -> Vec<Vec<Patch>> {
+        self.session_layers.borrow().clone()
+    }
+
+    pub fn active_session_id(&self) -> Option<String> {
+        self.active_session.borrow().clone()
+    }
+
+    pub fn require_active_session(&self) -> Result<String> {
+        self.active_session_id().ok_or_else(|| {
+            spatiotemporal::Error::Component("没有激活的会话，无法变更会话 patch".into())
+        })
     }
 
     #[allow(dead_code)]
@@ -113,7 +128,7 @@ impl AgentRuntime {
         if let Some(file) = self.file_layer.borrow().clone() {
             layers.push(file);
         }
-        layers.extend(self.dynamic_layers.borrow().clone());
+        layers.extend(self.session_layers.borrow().clone());
         layers
     }
 
@@ -132,6 +147,28 @@ impl AgentRuntime {
             AgentProfile::Coding => Some(self.coding_patch_path.as_path()),
             AgentProfile::Creation => Some(self.creation_patch_path.as_path()),
         }
+    }
+
+    /// 切换当前会话：从磁盘加载该会话的 patch 栈并对账。
+    pub fn activate_session(&self, workspace: &Path, session_id: &str) -> Result<Applied> {
+        if !session::valid_session_id(session_id) {
+            return Err(spatiotemporal::Error::Component(format!(
+                "非法 session_id：{session_id}"
+            )));
+        }
+        let layers = session::load_session_layers(workspace, session_id)?;
+        *self.active_session.borrow_mut() = Some(session_id.to_owned());
+        *self.session_workspace.borrow_mut() = Some(workspace.to_path_buf());
+        *self.session_layers.borrow_mut() = layers;
+        self.apply()
+    }
+
+    fn persist_session_layers(&self) -> Result<()> {
+        let workspace = self.session_workspace.borrow().clone().ok_or_else(|| {
+            spatiotemporal::Error::Component("会话 patch 持久化缺少工作区".into())
+        })?;
+        let session_id = self.require_active_session()?;
+        session::save_session_layers(&workspace, &session_id, &self.session_layers.borrow())
     }
 
     /// 运行时切换互斥配置档并对账插件树。
@@ -177,15 +214,19 @@ impl AgentRuntime {
     }
 
     pub fn push_layer(&self, layer: Vec<Patch>) -> Result<Applied> {
-        self.dynamic_layers.borrow_mut().push(layer);
+        self.require_active_session()?;
+        self.session_layers.borrow_mut().push(layer);
+        self.persist_session_layers()?;
         self.apply()
     }
 
     pub fn pop_layer(&self) -> Result<Option<Applied>> {
-        if self.dynamic_layers.borrow().is_empty() {
+        if self.session_layers.borrow().is_empty() {
             return Ok(None);
         }
-        self.dynamic_layers.borrow_mut().pop();
+        self.require_active_session()?;
+        self.session_layers.borrow_mut().pop();
+        self.persist_session_layers()?;
         Ok(Some(self.apply()?))
     }
 

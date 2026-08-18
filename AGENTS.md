@@ -27,7 +27,10 @@ spatiotemporal-agent/     agent harness（宿主 + cordis.yml + 浏览器 UI）
   src/
     host.rs               Toolbox、Llm、Surface、AgentLoop、SystemPrompt
     registry.rs           插件注册表（name → 工厂）
-    runtime.rs            AgentRuntime（热对账，创造模式）
+    runtime.rs            AgentRuntime（热对账；会话 patch 栈）
+    session.rs            JSONL 会话 + `.patch.json` 持久化
+    workspace.rs          工作区目录列表
+    workspace_store.rs    工作区切换与 `.agent/workspaces.json`
     plugins/              native 插件实现
     keys.rs               coeffect 键（llm、fs、shell、agent-loop…）
   plugins/                script 叶子（cite.js、echo.js）
@@ -115,7 +118,8 @@ cargo run -p spatiotemporal-agent -- --coding     # 编码模式（更多 tool �
 
 - 能力来自 `cordis.yml` 每一行；`name` 是**断言**不是赋值——换实现 = `disabled: true` + `insert` 新行（见 `cordis.smoke.yml`）。
 - 插件通过 `ctx.set::<Key>`（native）或 `host.registerTool` / `host.register-llm`（guest）贡献能力；卸载时宿主持有登记的逆。
-- Agent 侧热对账走 `AgentRuntime::push_layer`，仅创造模式/审批通过后使用；不要绕过 Loader 直接改 fiber 树。
+- Agent 侧热对账走 `AgentRuntime::push_layer`，仅创造模式/审批通过后使用，且**只写入当前会话**的 `.patch.json`；不要绕过 Loader 直接改 fiber 树。
+- **不要**把会话级 script/wasm 工具写进 `cordis.yml`（全局，所有新会话可见）；用 `define_script` + 审批，或 `save_patch` 导出到 `cordis.patch.yml`。
 
 ### 三种基质
 
@@ -125,6 +129,13 @@ cargo run -p spatiotemporal-agent -- --coding     # 编码模式（更多 tool �
 | **wasm** | 小 payload 叶子工具（outline） | 整段对话进 guest、新 coeffect |
 | **script** | 快速试验叶子（cite、echo） | 不可信代码无审批热装 |
 | **process** | MCP 桥、已有 CLI guest（NDJSON stdio） | 新 coeffect、大 payload |
+
+**guest 与 IO 的分工（对齐 dsh Code Mode 思路）**
+
+- script/wasm **默认只 grant `markdown`**（只读快照），**不要** grant `fs` / `shell`。
+- 需要读文件、跑命令：**你（LLM）直接调** native 的 `read` / `write` / `edit` / `bash` / `web_fetch`。
+- 若用户要求「写 script/wasm 叶子工具」且工具内部要编排其它 tool：在 guest 里用 **`host.callTool(name, argsJson)`**（script）或 WIT **`call-tool`**（wasm），走与 LLM 相同的 `Toolbox` 路径——**不要**为此新建 native 插件，也**不要**试图 grant fs。
+- 需要持久、可审计的文件/命令能力：优先 **native 插件**（`plugins/*.rs` + `cordis.yml` 一行），而不是把 IO 藏进 guest。
 
 ### Context 键（agent 已用）
 
@@ -144,13 +155,15 @@ cargo run -p spatiotemporal-agent -- --coding     # 编码模式（更多 tool �
 
 - 每个工具必须有**真实 JSON schema**（`tool_schema.rs` + `Toolbox::insert_with_schema`），与 handler 解析的字段一致。
 - wasm/script 工具走 `ToolHost::register`；schema 目前默认为 `{ query }`，若 guest 需要结构化参数要在宿主侧扩展。
+- guest 内编排其它 tool 用 **`host.callTool` / `call-tool`**（见上），不是 capability grant。
 - 工具描述会进入 OpenAI `tools` 与 `system-prompt` 的 schema 段落。
 
 ### Agent 循环
 
 - 逻辑在 `agent-loop` 插件，不在 Web 硬编码；换循环 = 换 cordis 行。
-- 多轮 tool 消息写入 session history；Web 用 JSONL 持久化到 `{workspace}/.agent/sessions/`。
-- 创造模式 `define_script` **必须**走 `ApprovalQueue`，禁止模型直接热装。
+- 多轮 tool 消息写入 session history；Web 用 JSONL 持久化到 `{workspace}/.agent/sessions/{id}.jsonl`；工具链路 `turn_steps` 同文件。
+- 创造模式热装 patch 持久化到 `{workspace}/.agent/sessions/{id}.patch.json`；`activate_session` 切换会话时对账 runtime。
+- 创造模式 `define_script` **必须**走 `ApprovalQueue`，禁止模型直接热装；审批绑定 `session_id`。
 
 ---
 
@@ -171,9 +184,12 @@ cargo run -p spatiotemporal-agent -- --coding     # 编码模式（更多 tool �
 
 在**本仓库**作为工作区使用时：
 
-- **工作区根** = 启动 `cargo run -p spatiotemporal-agent` 时的 cwd（通常是仓库根）。`read` / `write` / `edit` / `bash` 只能在此根内操作。
+- **工作区根** = 启动 `cargo run -p spatiotemporal-agent` 时的 cwd（通常是仓库根），可在浏览器切换其它目录；`read` / `write` / `edit` / `bash` 相对**当前工作区**。
+- **会话隔离**：左栏 plugins/tools 是**当前激活会话**的运行时快照；切换会话会 `activate_session` 并刷新；会话热装只进该会话的 `.patch.json`，不影响其它会话或新开会话。
+- **代码任务**：优先 `--coding` 或浏览器切「编码」；标准 profile 的 demo 文档类 tool 会分散轮次。
+- **长会话**：history 过长或 LLM 报 tool 消息格式错误时，**新开会话**再试，不要在同一条脏 history 上硬撑。
 - **先工具后结论**：改代码、查文档、验证假设时先 `read` / `bash` / `web_fetch`，再回答；引用内核/agent 行为时尽量贴路径或命令输出。
-- **默认文档**：未传路径时读 `spatiotemporal-agent/assets/sample.md`；可用 `read_doc` / `outline` / `cite`。
+- **工作区优先**：`read` / `write` / `edit` / `bash` 相对于启动时的 cwd（`WORKSPACE` 环境变量可覆盖）。默认 markdown 快照为工作区 `README.md`（供 outline/cite/stats）；`AGENTS.md` 由 system-prompt 注入。可选 `cargo run -p spatiotemporal-agent -- 路径/某篇.md` 换快照。
 - **网络**：`web_fetch` 仅 GET；抓取 crates.io、GitHub raw、论文链接时使用。
 - **bash**：优先 `cargo test`、`cargo clippy`、`./scripts/build-guests.sh` 等；不要 `git push --force` 除非用户明确要求。
 - **创造模式**（`--creation` 或浏览器「标准 / 创造」/`POST /api/mode`）：先 `inspect_*` 再看运行时；`define_script` 只提交审批；用户在浏览器点「批准」后才热装。
@@ -185,11 +201,13 @@ cargo run -p spatiotemporal-agent -- --coding     # 编码模式（更多 tool �
 
 | dsh 能力 | spatiotemporal-agent 现状 |
 |---|---|
-| profile / bundle 多层组合 | bootstrap + file（`cordis.patch.yml`）+ dynamic 三层；`run_patch` / `revert_patch` |
+| profile / bundle 多层组合 | bootstrap + profile + file（`cordis.patch.yml`）+ **会话 patch** 四层 |
+| per-agent / 会话 cordis | 会话 `.patch.json` + `activate_session`；`save_patch` 可导出文件层 |
 | `ctx.sessions` 完整事件流 | JSONL 消息子集 + deriveMessages |
 | `ctx.systemPrompt` 分段装配 | `system-prompt` 插件（AGENTS.md + schema） |
 | `ctx.agentLoop` 可替换 | `agent-loop` 插件 |
 | tool-cordis 审批 + preset | `approval-policy` 插件 + 多队列 + 审计 JSONL；`run_patch` 门控 |
+| guest 内编排 host tool（Code Mode） | script `host.callTool`、wasm `call-tool` → 宿主 `Toolbox` |
 | web_search / MCP / subagent | 未实现 |
 | sandbox-policy / permission-presets | fs/bash 工作区沙箱 only |
 | 异步 session 事件流 | `tiny_http` 同步阻塞 |

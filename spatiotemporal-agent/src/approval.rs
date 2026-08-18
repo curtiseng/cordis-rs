@@ -16,6 +16,7 @@ pub struct PendingInstall {
     pub kind: String,
     pub summary: String,
     pub preview: String,
+    pub session_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_lines: Option<usize>,
 }
@@ -72,6 +73,7 @@ struct AuditRecord {
 
 struct Pending {
     install: PendingInstall,
+    session_id: String,
     layer: Vec<Patch>,
     cleanup_path: Option<PathBuf>,
 }
@@ -120,6 +122,7 @@ impl ApprovalQueue {
     #[allow(clippy::too_many_arguments)]
     pub fn propose_install(
         &self,
+        session_id: String,
         id: String,
         kind: String,
         summary: String,
@@ -146,10 +149,12 @@ impl ApprovalQueue {
             kind: kind.clone(),
             summary,
             preview,
+            session_id: session_id.clone(),
             source_lines,
         };
         queue.push(Pending {
             install: install.clone(),
+            session_id,
             layer,
             cleanup_path,
         });
@@ -157,9 +162,15 @@ impl ApprovalQueue {
         Ok(install)
     }
 
-    pub fn approve(&self, runtime: &AgentRuntime, id: Option<&str>) -> Result<String> {
+    pub fn approve(
+        &self,
+        runtime: &AgentRuntime,
+        workspace: &Path,
+        id: Option<&str>,
+    ) -> Result<String> {
         let index = self.find_pending(id)?;
         let pending = self.pending.borrow_mut().remove(index);
+        runtime.activate_session(workspace, &pending.session_id)?;
         let applied = runtime.push_layer(pending.layer)?;
         self.audit("approve", &pending.install.id, &pending.install.kind, None);
         Ok(format!(

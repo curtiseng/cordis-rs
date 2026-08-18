@@ -1,4 +1,6 @@
+use std::cell::RefCell;
 use std::fs;
+use std::path::PathBuf;
 use std::rc::Rc;
 
 use futures::future::LocalBoxFuture;
@@ -12,6 +14,7 @@ use crate::util::{arg_str, parse_json_args, resolve_within};
 /// 本地插件：read / write / edit 文件工具。
 pub struct ToolFs {
     pub tools: Toolbox,
+    pub workspace: Rc<RefCell<PathBuf>>,
 }
 
 impl Component for ToolFs {
@@ -25,11 +28,11 @@ impl Component for ToolFs {
 
     fn apply(&self, ctx: Context, steps: Steps) -> LocalBoxFuture<'_, Result<()>> {
         let tools = self.tools.clone();
+        let workspace = self.workspace.clone();
         Box::pin(async move {
-            let fs = ctx.resolve::<FsKey>()?;
-            let root = fs.root().to_path_buf();
+            let _fs = ctx.resolve::<FsKey>()?;
 
-            let root_read = root.clone();
+            let root_read = workspace.clone();
             register(
                 &tools,
                 "read",
@@ -38,12 +41,13 @@ impl Component for ToolFs {
                 move |args| {
                     let value = parse_json_args(args)?;
                     let path = arg_str(&value, "path")?;
-                    let bytes = fs::read(resolve_within(&root_read, path)?).map_err(map_io)?;
+                    let root = root_read.borrow().clone();
+                    let bytes = fs::read(resolve_within(&root, path)?).map_err(map_io)?;
                     Ok(String::from_utf8_lossy(&bytes).into_owned())
                 },
             );
 
-            let root_write = root.clone();
+            let root_write = workspace.clone();
             register(
                 &tools,
                 "write",
@@ -53,7 +57,8 @@ impl Component for ToolFs {
                     let value = parse_json_args(args)?;
                     let path = arg_str(&value, "path")?;
                     let content = arg_str(&value, "content")?;
-                    let target = resolve_within(&root_write, path)?;
+                    let root = root_write.borrow().clone();
+                    let target = resolve_within(&root, path)?;
                     if let Some(parent) = target.parent() {
                         fs::create_dir_all(parent).map_err(map_io)?;
                     }
@@ -66,7 +71,7 @@ impl Component for ToolFs {
                 },
             );
 
-            let root_edit = root;
+            let root_edit = workspace;
             register(
                 &tools,
                 "edit",
@@ -77,7 +82,8 @@ impl Component for ToolFs {
                     let path = arg_str(&value, "path")?;
                     let old = arg_str(&value, "old")?;
                     let new = arg_str(&value, "new")?;
-                    let target = resolve_within(&root_edit, path)?;
+                    let root = root_edit.borrow().clone();
+                    let target = resolve_within(&root, path)?;
                     let text = fs::read_to_string(&target).map_err(map_io)?;
                     if !text.contains(old) {
                         return Err(spatiotemporal::Error::Component(format!(

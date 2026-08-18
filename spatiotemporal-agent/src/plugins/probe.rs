@@ -27,7 +27,7 @@ impl Surface for ProbeSurface {
 
     fn run(&self) {
         println!("界面：{}", self.kind());
-        println!("文档：{}", self.doc);
+        println!("markdown 快照：{}", self.doc);
         println!("插件：");
         for plugin in self.roster.list() {
             println!(

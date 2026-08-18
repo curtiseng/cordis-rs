@@ -26,6 +26,11 @@ interface host {
     /// 原生插件用 `ctx.set` 提供 `llm`；guest 说不出那个键，所以走这扇门。
     /// 安装发生在这个 fiber 的 `apply` 里，卸载时绑定跟着拆掉。
     register-llm: func(model: string);
+
+    /// 调用宿主工具表里的一个工具（与 LLM 调 tool 同路径，走 Toolbox）。
+    ///
+    /// `args` 是 JSON 文本；返回值也是字符串（通常是 JSON 或命令输出）。
+    call-tool: func(name: string, args: string) -> result<string, string>;
 }
 
 /// guest 必须导出的生命周期。

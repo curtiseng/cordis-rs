@@ -39,9 +39,10 @@ cargo run -p spatiotemporal-agent                # http://127.0.0.1:8787
 | 能力 | 说明 |
 |---|---|
 | **四种基质** | 同一棵 fiber 树里 native / wasm / script / process 叶子并存（`outline`、`cite`、`stats`、`bash`…） |
-| **三档 profile** | 标准 demo → **编码**（`--coding`，24 轮 tool、注入 `CODING.prompt.md`）→ **创造**（热装 script、`define_script` 走审批） |
+| **三档 profile** | 标准 demo → **编码**（`--coding`，更多 tool 轮次、注入 `CODING.prompt.md`）→ **创造**（热装 script、`define_script` 走审批） |
 | **工具链路可视化** | 每轮展示思考步骤 + 工具调用时间线；步骤持久化到 session JSONL |
-| **多会话** | 左栏列表切换 / 新开会话；刷新后从 `.agent/sessions/*.jsonl` 重建 UI |
+| **工作区切换** | 浏览器下拉或 API 切换项目目录；fs/bash 沙箱根热更新；最近目录记在 `.agent/workspaces.json` |
+| **多会话 + 会话级隔离** | 每工作区独立 `.agent/sessions/`；聊天 JSONL + 会话 patch JSON；创造模式热装只进当前会话 |
 | **配置热对账** | 浏览器或 `POST /api/mode` 切换 profile，无需重启进程 |
 
 无 API key 时用 `cargo run -p spatiotemporal-agent -- --smoke`（LLM 换 echo、界面换 probe，CI 同命令）。启动细节、环境变量、试玩脚本见 [`spatiotemporal-agent/README.md`](spatiotemporal-agent/README.md) 与 [`DEMO.md`](spatiotemporal-agent/DEMO.md)。
@@ -73,8 +74,10 @@ crates/spatiotemporal-script/   # QuickJS 脚本基质，模型现写的代码�
 crates/spatiotemporal-process/  # 子进程（NDJSON stdio）基质
 spatiotemporal-agent/           # 插件化 agent harness + Web UI（不发布 crates.io）
   cordis.yml / cordis.*.yml     # 组合与 profile patch（标准 / 编码 / 创造 / smoke）
-  assets/index.html             # 浏览器 UI（工具链路、多会话）
-  .agent/sessions/              # 运行时 JSONL 会话（工作区内，不入库）
+  assets/index.html             # 浏览器 UI（工作区、多会话、工具链路）
+  .agent/
+    workspaces.json             # 当前 / 最近工作区（启动 cwd 下，不入库）
+    sessions/                   # 每工作区：{id}.jsonl（聊天）+ {id}.patch.json（会话 patch）
 ```
 
 `default-members` 只含内核，所以 `cargo test` 不会去编 wasmtime 或 QuickJS——内核有 5 个依赖，而 wasmtime / rquickjs 各自再带一大坨。**Agent 单独编**：`cargo run -p spatiotemporal-agent`（见上一节）。整个 workspace 的 MSRV 统一为 **1.94**（wasmtime 47 的要求）。
@@ -225,6 +228,8 @@ cargo test -p spatiotemporal-script
 ```
 
 guest 还可以 `host.registerTool(name, description, fn)` 和 `host.registerLlm(model, fn)`（wasm 侧是 WIT 的 `register-tool` / `register-llm` + 导出 `invoke`）。登记本身的逆由宿主持有：脚本把自己的 `unload` 删掉，工具和 LLM 绑定照样会从桌上消失。
+
+guest 还可 **`host.callTool(name, argsJson)`**（script）或 WIT **`call-tool`**（wasm），在叶子内编排宿主工具表里的其它 tool——与 LLM 调 tool 同路径，无需 grant `fs`/`shell`。
 
 ## 子进程插件
 

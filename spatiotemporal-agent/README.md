@@ -54,12 +54,14 @@ export DEEPSEEK_API_KEY=sk-你的key
 cargo run -p spatiotemporal-agent
 ```
 
-**编码模式**（写代码任务，更多 tool 轮次）：
+**编码模式**（写代码任务，更多 tool 轮次，注入 `CODING.prompt.md`；轮次见 `cordis.coding.yml`）：
 
 ```bash
 cargo run -p spatiotemporal-agent -- --coding
 # 或浏览器点「标准 → 编码 → 创造」
 ```
+
+编码模式禁用 demo 文档类 tool，避免分散轮次。改仓库代码时**优先从编码模式启动**。
 
 也可 `POST /api/mode`：`{"profile": "coding"}` 或 `{"profile": "creation"}`（三档互斥）。
 
@@ -72,18 +74,73 @@ cargo run -p spatiotemporal-agent -- --creation   # 启动即创造模式
 
 也可 `POST /api/mode`：`{"profile": "creation"}` 或 `{"creation": true}`。
 
-看到 `打开 http://127.0.0.1:8787` 后，用浏览器打开。默认读 `assets/sample.md`（demo  tour，含四种基质与工具场景说明）。界面里有**试玩按钮**；完整脚本见 [`DEMO.md`](DEMO.md)。右侧文档与讲解员回复会渲染 Markdown（依赖 jsDelivr 上的 marked@15 / DOMPurify@3；离线时回退纯文本）。
+看到 `打开 http://127.0.0.1:8787` 后，用浏览器打开。默认以**工作区根**（启动时的 cwd；`WORKSPACE` 可覆盖）为沙箱；右侧预览 `README.md`（markdown 快照，供 outline/cite/stats）。`AGENTS.md` 注入 system prompt。界面里有**试玩按钮**；完整脚本见 [`DEMO.md`](DEMO.md)。Markdown 渲染依赖 jsDelivr（marked@15 / DOMPurify@3；离线回退纯文本）。
 
 **左栏**：**plugins** = 已挂载 fiber 组件；**tools** = LLM 可调用的函数（native 常一对多，script/wasm 叶子常与插件同名）。完整配置树用创造模式 `inspect_config` 查看。
 
-多轮对话会保留 tool 消息，模型能记住之前调用了哪些工具。会话持久化到工作区 `.agent/sessions/*.jsonl`（浏览器 localStorage 记当前 session id；**刷新后从 JSONL 重建聊天 UI 与工具链路**）。左栏可**新开会话**、切换历史会话。`agent-loop` 会在上下文过长时按 `cordis.yml` 的 `compaction` 配置压缩 history（截断 tool 输出、保留最近 N 条）。
+多轮对话会保留 tool 消息，模型能记住之前调用了哪些工具。左栏可**新开会话**、切换历史会话、悬停后点 **×** 删除（`DELETE /api/session`）。`agent-loop` 会在上下文过长时按 `cordis.yml` 的 `compaction` 配置压缩 history（截断 tool 输出、保留最近 N 条）。
+
+## 工作区与会话
+
+### 工作区
+
+- **初始根**：`cargo run` 时的 cwd，或环境变量 `WORKSPACE`。
+- **运行时切换**：浏览器顶栏工作区下拉（最近 12 个目录）或 **+** 输入绝对路径；`GET /api/workspaces`、`POST /api/workspaces/switch`。
+- **持久化**：在**启动时的工作区**下写 `.agent/workspaces.json`（`current` + `recent`）。
+- **沙箱**：`read` / `write` / `edit` / `bash` 的根目录随当前工作区热切换，无需重启进程。
+
+### 多会话（按工作区隔离）
+
+每个工作区有自己的 `.agent/sessions/`：
+
+| 文件 | 内容 |
+|---|---|
+| `{id}.jsonl` | 聊天消息 + `turn_steps` 等事件；刷新或切换会话时重建中间栏 UI |
+| `{id}.patch.json` | 该会话绑定的 cordis patch **层栈**（创造模式热装、审批通过后的 script/wasm 等） |
+
+浏览器 `localStorage` 按工作区记当前 session id：`spatiotemporal-session:{workspacePath}`。
+
+切换会话时服务端 `activate_session`：从磁盘加载对应 `.patch.json`，对账 fiber 树；左栏 **plugins / tools** 随当前会话自动刷新。
+
+### 配置层叠与隔离边界
+
+运行时 `AgentRuntime` 按顺序叠层并对账：
+
+```
+bootstrap → profile（cordis.coding.yml / cordis.creation.yml）→ cordis.patch.yml → 当前会话 patch
+```
+
+| 层 | 作用域 | 典型来源 |
+|---|---|---|
+| `cordis.yml` | **全局**（所有工作区、所有会话） | 仓库基础组合 |
+| profile / `cordis.patch.yml` | **进程**（切换 profile 或 reload 影响全部会话的基底） | `--coding` / `--creation`、文件 patch |
+| **会话 patch** | **仅当前会话** | `define_script` 审批通过、`run_patch`、`push_layer` |
+
+要点：
+
+- 创造模式 **`define_script` / `run_patch` 必须已有激活会话**；审批项带 `session_id`，批准时先切到该会话再热装。
+- **`push_layer` / `pop_layer` 只改当前会话**，并自动写回 `{id}.patch.json`。
+- **不要把会话级工具写进 `cordis.yml`**（会污染所有新会话）；试验叶子用 `define_script` + 审批，或 `save_patch` 导出到 `cordis.patch.yml` 作可选文件层。
+- `save_patch` 导出的是**当前会话** patch 栈的扁平 YAML，不是旧版「全局 dynamic 层」。
+
+### 相关 HTTP API
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/workspaces` | 当前工作区与 recent 列表 |
+| POST | `/api/workspaces/switch` | `{"path": "/abs/path"}` |
+| GET | `/api/sessions` | 当前工作区下的会话摘要 |
+| POST | `/api/session` | 新建会话并激活 |
+| GET | `/api/session?session_id=…` | 加载 history/events，并 **activate_session** |
+| DELETE | `/api/session?session_id=…` | 删除 jsonl + patch.json |
+| GET | `/api/status` | 含 `active_session`、当前 runtime 的 plugins/tools |
 
 在工作区根目录放 `AGENTS.md` 可注入项目级指令；`system-prompt` 插件还会把各工具的 JSON schema 写进 system prompt。
 
-换一篇自己的文档（路径相对当前工作目录）：
+换一篇 markdown 快照（路径相对工作区）：
 
 ```bash
-cargo run -p spatiotemporal-agent -- /绝对路径/某篇.md
+cargo run -p spatiotemporal-agent -- spatiotemporal-agent/assets/sample.md
 ```
 
 ### 5. 不调网络的自检
@@ -120,9 +177,11 @@ cargo run -p spatiotemporal-agent -- --smoke
 
 创造模式额外提供：`inspect_plugins` / `inspect_tools` / `inspect_config` / `define_plugin`（script / wasm / 已有 native）/ `define_script`（`define_plugin` 别名）/ `run_patch` / `revert_patch` / `reload_patch` / `undefine_plugin` / `save_patch`。
 
-`--creation` 还会加载 `cordis.creation.yml`：启用 `approval-policy`（script/wasm/process/patch 需审批，审计写入 `.agent/approvals.jsonl`）、`patch-watcher` 与 `creation-tools`。动态 patch 与文件 patch 分层：`save_patch` 只持久化 dynamic 层；启动时读 `cordis.patch.yml` 作为 file 层。
+`--creation` 还会加载 `cordis.creation.yml`：启用 `approval-policy`（script/wasm/process/patch 需审批，审计写入 `.agent/approvals.jsonl`）、`patch-watcher` 与 `creation-tools`。动态 patch 分层：启动时读 `cordis.patch.yml` 作为 file 层；**会话级**热装持久化到 `.agent/sessions/{id}.patch.json`；`save_patch` 可把当前会话 patch 导出为 `cordis.patch.yml`。
 
 wasm / script 适合叶子工具：调用稀疏、payload 小、能力面由 WIT / `host.*` 钉死。LLM 适配器和听端口的界面留在 native——前者每次要搬整份对话且需要 HTTP，后者 WASI 里没有「绑 8787」。
+
+**Tool 桥接**：script guest 可 `host.callTool(name, argsJson)`，wasm guest 可 WIT `call-tool`，走与 LLM 相同的宿主 `Toolbox`。demo 里 script/wasm 通常只 `grant: [markdown]`；需要读文件时由 LLM 直接调 `read`/`bash`，或在 define_script 的叶子代码里 `callTool`，**不要** grant `fs`/`shell`。
 
 ## 常见问题
 
@@ -137,6 +196,12 @@ wasm / script 适合叶子工具：调用稀疏、payload 小、能力面由 WIT
 
 **只想确认插件装上了**  
 `--smoke`，不听端口。
+
+**LLM 报 tool 消息格式错误**  
+多为长会话 history 脏（compaction 后 orphan tool 消息）。**新开会话**再试；编码任务用 `--coding`。
+
+**写 script 工具却要读工作区文件**  
+不要 grant `fs`；LLM 直接 `read`/`bash`，或 script 内 `host.callTool("read", json)`。
 
 ## Demo 试玩
 

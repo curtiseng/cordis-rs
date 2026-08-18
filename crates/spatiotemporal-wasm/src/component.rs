@@ -9,7 +9,7 @@ use wasmtime::component::{HasSelf, Linker};
 use wasmtime::{Config, Engine, Store};
 
 use crate::bindings::Plugin;
-use crate::host::{Capabilities, HostState};
+use crate::host::{Capabilities, HostState, set_tool_bridge};
 use crate::{LlmHost, ToolHost, ToolInvoke};
 
 /// 默认给 guest 的燃料额度。
@@ -133,6 +133,8 @@ impl Component for WasmPlugin {
             let pending_tools = Arc::new(Mutex::new(Vec::new()));
             let pending_llm = Arc::new(Mutex::new(None));
 
+            set_tool_bridge(self.tools.clone());
+
             let mut store = Store::new(
                 &self.engine,
                 HostState::new(
@@ -197,6 +199,7 @@ impl Component for WasmPlugin {
             let name = self.name.clone();
             let logs = self.logs.clone();
             steps.step_sync(move || {
+                set_tool_bridge(None);
                 let outcome = live.borrow_mut().unload(fuel);
                 if let Err(error) = outcome
                     && let Ok(mut logs) = logs.lock()

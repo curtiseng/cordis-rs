@@ -41,6 +41,11 @@ pub use host::Capabilities;
 pub trait ToolHost: 'static {
     fn register(&self, name: String, description: String, invoke: ToolInvoke);
     fn unregister(&self, name: &str);
+    fn call_tool(&self, _name: &str, _args: &str) -> spatiotemporal::Result<String> {
+        Err(spatiotemporal::Error::Component(
+            "宿主未接 tool 桥接".into(),
+        ))
+    }
 }
 
 /// 调一个子进程工具：参数和返回值都是字符串（通常是 JSON）。

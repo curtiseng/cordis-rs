@@ -1,4 +1,5 @@
-use std::path::Path;
+use std::cell::RefCell;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
@@ -16,6 +17,7 @@ const TIMEOUT: Duration = Duration::from_secs(30);
 /// 本地插件：bash 工具。
 pub struct ToolBash {
     pub tools: Toolbox,
+    pub workspace: Rc<RefCell<PathBuf>>,
 }
 
 impl Component for ToolBash {
@@ -29,16 +31,20 @@ impl Component for ToolBash {
 
     fn apply(&self, ctx: Context, steps: Steps) -> LocalBoxFuture<'_, Result<()>> {
         let tools = self.tools.clone();
+        let workspace = self.workspace.clone();
         Box::pin(async move {
-            let shell = ctx.resolve::<ShellKey>()?;
-            let root = shell.root().to_path_buf();
+            let _shell = ctx.resolve::<ShellKey>()?;
+            let _ = _shell.root();
 
             tools.insert_with_schema(
                 "bash".into(),
                 "在工作区内执行 shell 命令（30 秒超时）".into(),
                 "native",
                 tool_schema::bash_schema(),
-                Rc::new(move |args: &str| run_bash(&root, args)),
+                Rc::new(move |args: &str| {
+                    let root = workspace.borrow().clone();
+                    run_bash(&root, args)
+                }),
             );
 
             let tools = tools.clone();

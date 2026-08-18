@@ -139,6 +139,7 @@ impl Component for ScriptPlugin {
                     logs.clone(),
                     pending_tools.clone(),
                     pending_llm.clone(),
+                    self.tools.clone(),
                 )
                 .map_err(js_error("接不上宿主接口"))?;
 

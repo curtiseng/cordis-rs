@@ -3,11 +3,13 @@
 //! 这些测试要真的 `.wasm` 产物。找不到就直接失败并让你去跑 `scripts/build-guests.sh`
 //! ——比静默跳过好，跳过会得到一个「绿了但什么都没测」的测试。
 
+use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 use spatiotemporal::{App, Context, Error, FnComponent, Key, Result, State};
-use spatiotemporal_wasm::{Capabilities, WasmPlugin};
+use spatiotemporal_wasm::{Capabilities, ToolHost, ToolInvoke, WasmPlugin};
 
 trait Database {
     fn dsn(&self) -> String;
@@ -221,4 +223,58 @@ fn the_adapter_reports_errors_as_component_failures() {
         Vec::new(),
     );
     assert_component_error(missing.expect_err("文件不存在该报错"));
+}
+
+struct BridgeHost {
+    calls: Arc<Mutex<Vec<(String, String)>>>,
+    leaf: RefCell<Option<ToolInvoke>>,
+}
+
+impl ToolHost for BridgeHost {
+    fn register(&self, name: String, _description: String, invoke: ToolInvoke) {
+        if name == "leaf" {
+            *self.leaf.borrow_mut() = Some(invoke);
+        }
+    }
+
+    fn unregister(&self, _name: &str) {}
+
+    fn call_tool(&self, name: &str, args: &str) -> Result<String> {
+        self.calls
+            .lock()
+            .map_err(|_| Error::Component("锁 poison".into()))?
+            .push((name.to_owned(), args.to_owned()));
+        Ok(format!("ok:{name}:{args}"))
+    }
+}
+
+/// wasm guest 叶子 tool 可通过 call-tool 走宿主工具表。
+#[test]
+fn a_wasm_guest_can_bridge_host_tools() {
+    let calls = Arc::new(Mutex::new(Vec::new()));
+    let bridge = Rc::new(BridgeHost {
+        calls: calls.clone(),
+        leaf: RefCell::new(None),
+    });
+    let host = bridge.clone() as Rc<dyn ToolHost>;
+
+    let mut app = App::new();
+    let plugin = Rc::new(
+        WasmPlugin::open(guest("bridge"), capabilities(), Vec::new())
+            .expect("bridge 应该能编")
+            .with_tools(host),
+    );
+    app.root().use_component(plugin.clone());
+    app.settle();
+
+    assert!(plugin.logs().contains(&"bridge 装上了".to_owned()));
+
+    let leaf = bridge.leaf.borrow().clone().expect("leaf 该登记上");
+    let out = leaf(r#"{"q":1}"#).expect("leaf 该能调");
+    assert!(out.contains("bridged"));
+    assert!(out.contains("ok:upstream"));
+    assert_eq!(
+        calls.lock().unwrap()[0],
+        ("upstream".into(), r#"{"q":1}"#.into())
+    );
 }

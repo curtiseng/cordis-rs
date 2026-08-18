@@ -3,10 +3,12 @@
 //! 脚本就是字符串，不需要预编译产物——这正是「模型这一轮现写」和 wasm 文件
 //! 的差别。测试找不到语法错误会在 `from_source` 当场失败，而不是静默跳过。
 
+use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 use spatiotemporal::{App, Context, Error, FnComponent, Key, State};
-use spatiotemporal_script::{Capabilities, LlmHost, ScriptPlugin, ToolInvoke};
+use spatiotemporal_script::{Capabilities, LlmHost, ScriptPlugin, ToolHost, ToolInvoke};
 
 trait Database {
     fn dsn(&self) -> String;
@@ -319,4 +321,66 @@ export function unload() {}
 
     app.block_on(handle.dispose());
     assert!(app.root().lookup::<Llm>().is_none());
+}
+
+struct BridgeHost {
+    calls: Arc<Mutex<Vec<(String, String)>>>,
+    leaf: RefCell<Option<ToolInvoke>>,
+}
+
+impl ToolHost for BridgeHost {
+    fn register(&self, name: String, _description: String, invoke: ToolInvoke) {
+        if name == "leaf" {
+            *self.leaf.borrow_mut() = Some(invoke);
+        }
+    }
+
+    fn unregister(&self, _name: &str) {}
+
+    fn call_tool(&self, name: &str, args: &str) -> spatiotemporal::Result<String> {
+        self.calls
+            .lock()
+            .map_err(|_| Error::Component("锁 poison".into()))?
+            .push((name.to_owned(), args.to_owned()));
+        Ok(format!("ok:{name}:{args}"))
+    }
+}
+
+/// guest 叶子 tool 可通过 host.callTool 走宿主工具表。
+#[test]
+fn a_script_can_bridge_host_tools() {
+    const LEAF: &str = r#"
+export function load() {
+  host.registerTool("leaf", "桥接", (args) => {
+    const out = host.callTool("upstream", args);
+    return JSON.stringify({ bridged: out });
+  });
+}
+export function unload() {}
+"#;
+
+    let calls = Arc::new(Mutex::new(Vec::new()));
+    let bridge = Rc::new(BridgeHost {
+        calls: calls.clone(),
+        leaf: RefCell::new(None),
+    });
+    let host = bridge.clone() as Rc<dyn ToolHost>;
+
+    let mut app = App::new();
+    let plugin = Rc::new(
+        ScriptPlugin::from_source("bridge", LEAF, capabilities(), Vec::new())
+            .expect("bridge 脚本该能编")
+            .with_tools(host),
+    );
+    app.root().use_component(plugin);
+    app.settle();
+
+    let leaf = bridge.leaf.borrow().clone().expect("leaf 该登记上");
+    let out = leaf(r#"{"q":1}"#).expect("leaf 该能调");
+    assert!(out.contains("bridged"));
+    assert!(out.contains("ok:upstream"));
+    assert_eq!(
+        calls.lock().unwrap()[0],
+        ("upstream".into(), r#"{"q":1}"#.into())
+    );
 }

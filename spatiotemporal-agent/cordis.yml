@@ -28,7 +28,7 @@
 - id: agent-loop
   name: agent-loop
   config:
-    max_rounds: 12
+    max_rounds: 50
     compaction:
       max_messages: 48
       max_chars: 64000
@@ -38,7 +38,7 @@
 - id: doc
   name: doc
   config:
-    path: assets/sample.md
+    path: spatiotemporal-agent/assets/sample.md
 
 - id: read-doc
   name: read-doc

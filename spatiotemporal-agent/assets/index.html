@@ -6,577 +6,1648 @@
   <title>Spatiotemporal Agent</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Syne:wght@700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --void: #061018;
-      --panel: #0b1822;
-      --ink: #e6f0f4;
-      --muted: #6d8490;
-      --line: #1a3340;
-      --native: #3dcea8;
-      --wasm: #3aa0d8;
-      --script: #e07a5f;
-      --ice: #8fd4ff;
+      --bg: #0f0f0f;
+      --sidebar: #171717;
+      --surface: #1e1e1e;
+      --surface-2: #262626;
+      --surface-hover: #2d2d2d;
+      --border: #333;
+      --border-soft: #2a2a2a;
+      --text: #ececec;
+      --text-secondary: #a3a3a3;
+      --text-muted: #737373;
+      --accent: #14b8a6;
+      --accent-dim: rgba(20, 184, 166, 0.15);
+      --user-bg: #2a2a2a;
+      --danger: #f87171;
+      --native: #34d399;
+      --wasm: #60a5fa;
+      --script: #fb923c;
+      --process: #a78bfa;
+      --ide-sidebar: #252526;
+      --ide-editor: #1e1e1e;
+      --ide-tab-inactive: #2d2d2d;
+      --ide-list-hover: #2a2d2e;
+      --ide-list-active: #37373d;
+      --ide-folder: #dcb67a;
+      --ide-file: #c5c5c5;
+      --ide-file-md: #519aba;
+      --ide-file-rs: #dea584;
+      --ide-file-json: #dcdcaa;
+      --ide-file-html: #ce9178;
+      --radius: 12px;
+      --radius-sm: 8px;
+      --sidebar-w: 260px;
+      --doc-w: 380px;
+      --chat-max: 46rem;
+      --ease: cubic-bezier(0.4, 0, 0.2, 1);
     }
+    .icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      line-height: 0;
+    }
+    .icon svg { display: block; }
+    .icon-sm svg { width: 14px; height: 14px; }
+    .icon-md svg { width: 16px; height: 16px; }
+    .icon-lg svg { width: 20px; height: 20px; }
     * { box-sizing: border-box; }
     html, body {
       margin: 0;
       height: 100%;
       overflow: hidden;
-      background: var(--void);
-      color: var(--ink);
-      font: 14px/1.5 "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.6 "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
     }
     body {
       display: grid;
-      grid-template-columns: 268px minmax(0, 1fr) 360px;
+      grid-template-columns: var(--sidebar-w) minmax(0, 1fr) var(--doc-w);
       height: 100dvh;
-      background-image:
-        linear-gradient(180deg, rgba(143, 212, 255, 0.03), transparent 28%),
-        repeating-linear-gradient(0deg, transparent, transparent 23px, rgba(26, 51, 64, 0.45) 24px);
     }
-    .rail, .stage, .source {
+    .sidebar, .stage, .doc-panel {
       min-height: 0;
       height: 100dvh;
       display: flex;
       flex-direction: column;
     }
-    .rail, .source { background: var(--panel); }
-    .rail { border-right: 1px solid var(--line); }
-    .source { border-left: 1px solid var(--line); }
-    .pane-head, .composer {
-      flex: 0 0 auto;
+    .sidebar {
+      background: var(--sidebar);
+      border-right: 1px solid var(--border-soft);
     }
-    .pane-head {
-      padding: 18px 18px 14px;
-      border-bottom: 1px solid var(--line);
+    .doc-panel {
+      background: var(--ide-sidebar);
+      border-left: 1px solid var(--border-soft);
+    }
+    .sidebar-top {
+      flex: 0 0 auto;
+      padding: 14px 12px 10px;
     }
     .brand {
-      font-family: Syne, sans-serif;
-      font-size: 15px;
-      letter-spacing: 0.08em;
-      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0 0 12px;
+      padding: 0 4px;
     }
-    .eyebrow {
-      font-family: "IBM Plex Mono", ui-monospace, monospace;
-      font-size: 10px;
-      letter-spacing: 0.16em;
-      text-transform: uppercase;
-      color: var(--muted);
-      margin: 0 0 8px;
+    .brand-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent), #0d9488);
+      display: grid;
+      place-items: center;
+      color: #042f2e;
+      box-shadow: 0 2px 12px rgba(20, 184, 166, 0.25);
     }
-    .scroll {
+    .brand-icon svg { width: 18px; height: 18px; }
+    .brand-name {
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+    .btn-new-chat {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 12px;
+      font: 500 13px/1 inherit;
+      color: var(--text);
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: background 0.15s var(--ease), border-color 0.15s var(--ease), transform 0.1s var(--ease);
+    }
+    .btn-new-chat:hover {
+      background: var(--surface-hover);
+      border-color: #444;
+    }
+    .btn-new-chat:active { transform: scale(0.98); }
+    .sidebar-scroll {
       flex: 1 1 auto;
       min-height: 0;
       overflow: auto;
-      padding: 14px 16px 24px;
+      padding: 4px 8px 16px;
     }
-    .scroll::-webkit-scrollbar { width: 8px; }
-    .scroll::-webkit-scrollbar-thumb { background: var(--line); }
-    .group { margin: 0 0 22px; }
-    .card {
-      display: grid;
-      grid-template-columns: 8px 1fr;
-      gap: 0 10px;
-      padding: 9px 0;
-      border-bottom: 1px solid rgba(26, 51, 64, 0.7);
-    }
-    .card .led {
-      width: 8px;
-      height: 8px;
-      margin-top: 5px;
-      border-radius: 50%;
-      background: currentColor;
-      box-shadow: 0 0 8px currentColor;
-    }
-    .card.native { color: var(--native); }
-    .card.wasm { color: var(--wasm); }
-    .card.script { color: var(--script); }
-    .card .name {
-      font-family: "IBM Plex Mono", ui-monospace, monospace;
-      font-size: 12px;
-      color: var(--ink);
-    }
-    .card .meta {
-      grid-column: 2;
-      color: var(--muted);
+    .sidebar-scroll::-webkit-scrollbar { width: 6px; }
+    .sidebar-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    .sidebar-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
       font-size: 11px;
-      margin-top: 2px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      padding: 12px 8px 6px;
+      margin: 0;
     }
-    .session-new {
-      width: 100%;
-      margin: 0 0 10px;
-      padding: 7px 10px;
-      font: 600 11px/1 "IBM Plex Sans", sans-serif;
-      letter-spacing: 0.06em;
-      background: transparent;
-      color: var(--ice);
-      border: 1px solid var(--line);
-      cursor: pointer;
-    }
-    .session-new:hover { border-color: var(--ice); }
     .session-item {
-      padding: 8px 0;
-      border-bottom: 1px solid rgba(26, 51, 64, 0.7);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin: 2px 0;
+      border-radius: var(--radius-sm);
       cursor: pointer;
+      transition: background 0.15s var(--ease), box-shadow 0.15s var(--ease);
     }
-    .session-item:hover .session-title { color: var(--ice); }
-    .session-item.active .session-title { color: var(--ice); }
+    .session-item:hover { background: var(--surface-hover); }
+    .session-item.active {
+      background: var(--surface-2);
+      box-shadow: inset 3px 0 0 var(--accent);
+    }
+    .session-line {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+    }
+    .session-glyph {
+      margin-top: 2px;
+      color: var(--text-muted);
+    }
+    .session-text { flex: 1; min-width: 0; }
+    .session-item.active .session-glyph { color: var(--accent); }
+    .session-item-body {
+      flex: 1;
+      min-width: 0;
+      padding: 9px 8px 9px 10px;
+    }
     .session-title {
-      font-size: 12px;
-      color: var(--ink);
+      font-size: 13px;
+      color: var(--text);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
+    .session-item.active .session-title { font-weight: 500; }
     .session-meta {
-      font-family: "IBM Plex Mono", ui-monospace, monospace;
-      font-size: 10px;
-      color: var(--muted);
-      margin-top: 2px;
-    }
-    .stage { background: transparent; }
-    .bus {
-      display: flex;
-      align-items: center;
-      gap: 0;
-      overflow-x: auto;
-      padding: 4px 0 2px;
-    }
-    .bus .node {
-      font-family: "IBM Plex Mono", ui-monospace, monospace;
-      font-size: 10px;
-      color: var(--ink);
-      white-space: nowrap;
-    }
-    .bus .wire {
-      flex: 0 0 18px;
-      height: 1px;
-      background: var(--line);
-      margin: 0 6px;
-      position: relative;
-    }
-    .bus .wire::after {
-      content: "";
-      position: absolute;
-      right: -2px;
-      top: -2px;
-      width: 5px;
-      height: 5px;
-      border-radius: 50%;
-      background: var(--ice);
-      opacity: 0.7;
-    }
-    .status {
-      margin-top: 8px;
-      color: var(--muted);
-      font-family: "IBM Plex Mono", ui-monospace, monospace;
       font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 1px;
     }
-    .status.warn { color: var(--script); }
-    .approval {
-      margin-top: 12px;
-      padding: 12px 14px;
-      border: 1px solid var(--script);
-      background: rgba(224, 122, 95, 0.08);
-    }
-    .approval .title {
-      font-family: "IBM Plex Mono", ui-monospace, monospace;
-      font-size: 11px;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--script);
-      margin: 0 0 8px;
-    }
-    .approval pre {
-      margin: 0 0 10px;
-      font: 11px/1.45 "IBM Plex Mono", ui-monospace, monospace;
-      color: var(--muted);
-      white-space: pre-wrap;
-      max-height: 120px;
-      overflow: auto;
-    }
-    .approval .actions {
-      display: flex;
-      gap: 8px;
-    }
-    .approval button.reject {
+    .session-delete {
+      flex-shrink: 0;
+      width: 28px;
+      height: 28px;
+      margin-right: 4px;
+      padding: 0;
+      display: grid;
+      place-items: center;
+      color: var(--text-muted);
       background: transparent;
-      color: var(--script);
-      border: 1px solid var(--script);
-    }
-    .approval .pending-item {
+      border: none;
+      border-radius: 6px;
       cursor: pointer;
-      padding: 0.35rem 0;
-      border-bottom: 1px solid var(--line);
-      font-size: 0.82rem;
+      opacity: 0;
+      transition: opacity 0.15s var(--ease), color 0.15s, background 0.15s, transform 0.1s;
     }
-    .approval .pending-item.active {
-      color: var(--accent);
+    .session-item:hover .session-delete,
+    .session-item.active .session-delete { opacity: 1; }
+    .session-delete:hover { color: var(--danger); background: rgba(248, 113, 113, 0.12); }
+    .session-delete:active { transform: scale(0.92); }
+    .sidebar-details {
+      margin: 4px 0;
+      border-radius: var(--radius-sm);
     }
-    #log { padding: 20px 28px 12px; }
-    .empty {
-      color: var(--muted);
-      max-width: 28em;
-      margin: 12vh 0 0;
-    }
-    .empty strong { color: var(--ink); font-weight: 500; }
-    .prompts {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-top: 1.25rem;
-    }
-    .prompt-chip {
-      font: 12px/1.3 "IBM Plex Sans", system-ui, sans-serif;
-      padding: 6px 10px;
-      border: 1px solid var(--line);
-      background: rgba(255, 255, 255, 0.04);
-      color: var(--muted);
+    .sidebar-details summary {
+      list-style: none;
       cursor: pointer;
-      border-radius: 2px;
-    }
-    .prompt-chip:hover {
-      color: var(--ink);
-      border-color: var(--accent);
-    }
-    .demo-note {
-      margin-top: 1rem;
+      padding: 8px 10px;
       font-size: 12px;
-      color: var(--muted);
-    }
-    .demo-note a { color: var(--ice); }
-    .msg { margin: 0 0 18px; max-width: 44em; }
-    .msg .who {
-      font-family: "IBM Plex Mono", ui-monospace, monospace;
-      font-size: 10px;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--muted);
-      margin-bottom: 6px;
-    }
-    .msg.user .who { color: var(--ice); }
-    .msg.user .body { color: var(--ice); }
-    .msg.err .body { color: var(--script); }
-    .trace {
-      font-family: "IBM Plex Mono", ui-monospace, monospace;
-      font-size: 12px;
-      background: rgba(11, 24, 34, 0.85);
-      border: 1px solid var(--line);
-      border-left-width: 3px;
-      padding: 8px 12px;
-      margin: 8px 0 14px;
-      color: var(--muted);
-      white-space: pre-wrap;
-      max-height: 160px;
-      overflow: auto;
-    }
-    .trace.native { border-left-color: var(--native); }
-    .trace.wasm { border-left-color: var(--wasm); }
-    .trace.script { border-left-color: var(--script); }
-    .trace.process { border-left-color: #9b8bf2; }
-    .turn-block { margin: 0 0 28px; }
-    .chain {
-      margin: 8px 0 14px;
-      padding: 10px 12px 12px;
-      border: 1px solid var(--line);
-      background: rgba(11, 24, 34, 0.55);
-      max-width: 52em;
-    }
-    .chain-head {
-      font-family: "IBM Plex Mono", ui-monospace, monospace;
-      font-size: 10px;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--muted);
-      margin: 0 0 8px;
-    }
-    .chain-bus {
+      font-weight: 500;
+      color: var(--text-secondary);
+      border-radius: var(--radius-sm);
+      user-select: none;
       display: flex;
-      flex-wrap: wrap;
       align-items: center;
-      gap: 4px 6px;
-      margin: 0 0 10px;
-      padding-bottom: 8px;
-      border-bottom: 1px dashed rgba(26, 51, 64, 0.8);
+      justify-content: space-between;
+      gap: 8px;
+      transition: background 0.15s var(--ease), color 0.15s;
     }
-    .chain-bus .node {
+    .sidebar-details summary .summary-left {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .sidebar-details summary .summary-chevron {
+      color: var(--text-muted);
+      transition: transform 0.2s var(--ease);
+    }
+    .sidebar-details[open] summary .summary-chevron { transform: rotate(90deg); }
+    .sidebar-details summary::-webkit-details-marker { display: none; }
+    .sidebar-details summary:hover { background: var(--surface-hover); color: var(--text); }
+    .sidebar-details[open] summary { color: var(--text); }
+    .sidebar-details .items { padding: 0 4px 8px; }
+    .item-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 6px 8px;
+      border-radius: 6px;
+      font-size: 12px;
+    }
+    .item-row:hover { background: rgba(255,255,255,0.03); }
+    .item-dot {
+      width: 7px;
+      height: 7px;
+      margin-top: 5px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .item-row.native .item-dot { background: var(--native); }
+    .item-row.wasm .item-dot { background: var(--wasm); }
+    .item-row.script .item-dot { background: var(--script); }
+    .item-row.process .item-dot { background: var(--process); }
+    .item-name {
+      font-family: "IBM Plex Mono", ui-monospace, monospace;
+      font-size: 11px;
+      color: var(--text);
+    }
+    .item-meta {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 1px;
+    }
+    .stage { background: var(--bg); }
+    .chat-header {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 20px;
+      border-bottom: 1px solid var(--border-soft);
+      background: var(--bg);
+    }
+    .chat-header-left { min-width: 0; flex: 1; }
+    .btn-workspace {
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 34px;
+      padding: 0 12px;
+      font: 500 12px/1 inherit;
+      color: var(--text-secondary);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .btn-workspace:hover { color: var(--text); border-color: #555; background: var(--surface-hover); }
+    .btn-workspace.active {
+      color: var(--accent);
+      border-color: rgba(20, 184, 166, 0.4);
+      background: rgba(20, 184, 166, 0.1);
+    }
+    .btn-workspace .tab-count {
+      min-width: 18px;
+      height: 18px;
+      padding: 0 5px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 600;
+      line-height: 18px;
+      text-align: center;
+      color: #042f2e;
+      background: var(--accent);
+    }
+    .workspace-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 90;
+      background: rgba(0, 0, 0, 0.45);
+    }
+    body.workspace-drawer-open .workspace-backdrop { display: block; }
+    .model-line {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+    .status-dot {
+      flex-shrink: 0;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      box-shadow: 0 0 0 2px rgba(115, 115, 115, 0.2);
+    }
+    .status-dot.ok {
+      background: var(--native);
+      box-shadow: 0 0 8px rgba(52, 211, 153, 0.45);
+    }
+    .status-dot.warn {
+      background: var(--script);
+      box-shadow: 0 0 8px rgba(251, 146, 60, 0.4);
+    }
+    .model-badge {
+      font-size: 13px;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .model-badge.warn { color: var(--script); }
+    .bus-mini {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 6px;
+    }
+    .bus-mini .chip {
       font-family: "IBM Plex Mono", ui-monospace, monospace;
       font-size: 10px;
       padding: 2px 7px;
-      border: 1px solid var(--line);
-      color: var(--ink);
-      background: rgba(255, 255, 255, 0.03);
+      border-radius: 999px;
+      background: var(--surface);
+      color: var(--text-muted);
+      border: 1px solid var(--border-soft);
     }
-    .chain-bus .node.think { color: var(--ice); border-color: rgba(143, 212, 255, 0.35); }
-    .chain-bus .node.native { color: var(--native); border-color: rgba(61, 206, 168, 0.35); }
-    .chain-bus .node.wasm { color: var(--wasm); border-color: rgba(58, 160, 216, 0.35); }
-    .chain-bus .node.script { color: var(--script); border-color: rgba(224, 122, 95, 0.35); }
-    .chain-bus .node.process { color: #9b8bf2; border-color: rgba(155, 139, 242, 0.35); }
-    .chain-bus .arrow { color: var(--muted); font-size: 10px; }
-    .chain-steps { display: flex; flex-direction: column; gap: 8px; }
-    .chain-step {
+    .mode-wrap {
+      position: relative;
+      flex-shrink: 0;
+      align-self: flex-end;
+    }
+    .mode-wrap .mode-icon {
+      position: absolute;
+      left: 11px;
+      bottom: 18px;
+      color: var(--text-muted);
+      pointer-events: none;
+      z-index: 1;
+      transition: color 0.15s;
+    }
+    .mode-wrap.coding .mode-icon { color: var(--native); }
+    .mode-wrap.creation .mode-icon { color: var(--script); }
+    .mode-select {
+      flex-shrink: 0;
+      align-self: flex-end;
+      height: 52px;
+      min-width: 108px;
+      padding: 0 28px 0 34px;
+      font: 500 13px/1 inherit;
+      color: var(--text-secondary);
+      background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5L6 7.5L9 4.5' stroke='%23737373' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 10px center;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      appearance: none;
+      transition: color 0.15s var(--ease), border-color 0.15s, background-color 0.15s, box-shadow 0.15s;
+    }
+    .mode-select:hover { color: var(--text); border-color: #555; }
+    .mode-select:focus { outline: none; border-color: #555; box-shadow: 0 0 0 2px rgba(255,255,255,0.06); }
+    .mode-select.coding { color: var(--native); border-color: rgba(52, 211, 153, 0.35); background-color: rgba(52, 211, 153, 0.06); }
+    .mode-select.creation { color: var(--script); border-color: rgba(251, 146, 60, 0.35); background-color: rgba(251, 146, 60, 0.06); }
+    .composer-row {
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+    }
+    .composer-row .input-wrap { flex: 1; min-width: 0; }
+    .approval-banner {
+      flex: 0 0 auto;
+      margin: 0;
+      padding: 12px 20px;
+      border-bottom: 1px solid rgba(251, 146, 60, 0.25);
+      background: rgba(251, 146, 60, 0.06);
+    }
+    .approval-banner[hidden] { display: none; }
+    .approval-title {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--script);
+      margin: 0 0 8px;
+    }
+    .approval-banner pre {
+      margin: 0 0 10px;
+      font: 11px/1.45 "IBM Plex Mono", ui-monospace, monospace;
+      color: var(--text-muted);
+      white-space: pre-wrap;
+      max-height: 100px;
+      overflow: auto;
+    }
+    .approval-actions { display: flex; gap: 8px; }
+    .approval-actions button {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      font: 500 12px/1 inherit;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      border: none;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+    .approval-actions button:active { transform: scale(0.97); }
+    .approval-actions button:first-child {
+      background: var(--accent);
+      color: #042f2e;
+    }
+    .approval-actions button.reject {
+      background: transparent;
+      color: var(--script);
+      border: 1px solid rgba(251, 146, 60, 0.45);
+    }
+    .pending-item {
+      cursor: pointer;
+      padding: 4px 0;
+      font-size: 12px;
+      color: var(--text-secondary);
+      border-bottom: 1px solid var(--border-soft);
+    }
+    .pending-item.active { color: var(--accent); }
+    .chat-scroll {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: auto;
+      scroll-behavior: smooth;
+    }
+    .chat-scroll::-webkit-scrollbar { width: 8px; }
+    .chat-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    #log {
+      max-width: var(--chat-max);
+      margin: 0 auto;
+      padding: 24px 20px 16px;
+    }
+    .empty {
+      text-align: center;
+      padding: 8vh 20px 24px;
+      color: var(--text-muted);
+    }
+    .empty-icon {
+      width: 56px;
+      height: 56px;
+      margin: 0 auto 16px;
+      border-radius: 16px;
+      background: linear-gradient(145deg, var(--surface), var(--surface-2));
+      border: 1px solid var(--border-soft);
+      display: grid;
+      place-items: center;
+      color: var(--accent);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+    }
+    .empty-icon svg { width: 26px; height: 26px; opacity: 0.9; }
+    .empty h2 {
+      margin: 0 0 8px;
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .empty p { margin: 0; font-size: 14px; line-height: 1.5; }
+    .msg-row {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 24px;
+      animation: fadeIn 0.2s ease;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: none; }
+    }
+    .msg-row.user { flex-direction: row-reverse; }
+    .msg-row.user .msg-bubble {
+      background: var(--user-bg);
+      border-radius: 18px 18px 4px 18px;
+    }
+    .msg-row.assistant .msg-bubble { border-radius: 4px 18px 18px 18px; }
+    .msg-row.err .msg-bubble {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      background: rgba(248, 113, 113, 0.08);
+      border: 1px solid rgba(248, 113, 113, 0.25);
+      color: var(--danger);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      max-width: 100%;
+    }
+    .msg-row.err .err-icon { flex-shrink: 0; margin-top: 1px; }
+    .avatar {
+      flex-shrink: 0;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      margin-top: 2px;
+      transition: box-shadow 0.15s;
+    }
+    .avatar .icon svg { width: 16px; height: 16px; }
+    .msg-row.user .avatar {
+      background: var(--accent-dim);
+      color: var(--accent);
+    }
+    .msg-row.assistant .avatar,
+    .msg-row.pulse .avatar {
+      background: linear-gradient(145deg, var(--surface-2), var(--surface));
+      border: 1px solid var(--border-soft);
+      color: var(--accent);
+    }
+    .msg-row.err .avatar { display: none; }
+    .msg-bubble {
+      flex: 1;
+      min-width: 0;
+      max-width: calc(100% - 44px);
+      padding: 2px 0;
+      font-size: 15px;
+      line-height: 1.65;
+      color: var(--text);
+    }
+    .msg-row.user .msg-bubble { text-align: right; padding: 10px 14px; max-width: 85%; flex: 0 1 auto; }
+    .tool-panel {
+      max-width: var(--chat-max);
+      margin: 0 auto 16px;
+      padding: 0 20px 0 52px;
+    }
+    .tool-panel details {
+      border: 1px solid var(--border-soft);
+      border-radius: var(--radius-sm);
+      background: var(--surface);
+      overflow: hidden;
+    }
+    .tool-panel summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 10px 12px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      user-select: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .tool-panel summary::-webkit-details-marker { display: none; }
+    .tool-panel summary:hover { background: var(--surface-hover); color: var(--text); }
+    .tool-panel summary .summary-icon { color: var(--accent); opacity: 0.85; }
+    .tool-panel summary .chevron {
+      margin-left: auto;
+      color: var(--text-muted);
+      transition: transform 0.2s var(--ease);
+    }
+    .tool-panel details[open] summary .chevron { transform: rotate(90deg); }
+    .tool-bus {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      padding: 0 12px 10px;
+      border-bottom: 1px solid var(--border-soft);
+    }
+    .tool-bus .node {
+      font-family: "IBM Plex Mono", ui-monospace, monospace;
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--border-soft);
+      color: var(--text-secondary);
+    }
+    .tool-bus .node.think { color: var(--accent); border-color: rgba(20,184,166,0.3); }
+    .tool-bus .node.native { color: var(--native); border-color: rgba(52,211,153,0.3); }
+    .tool-bus .node.wasm { color: var(--wasm); border-color: rgba(96,165,250,0.3); }
+    .tool-bus .node.script { color: var(--script); border-color: rgba(251,146,60,0.3); }
+    .tool-bus .node.process { color: var(--process); border-color: rgba(167,139,250,0.3); }
+    .tool-bus .arrow { color: var(--text-muted); font-size: 10px; }
+    .tool-steps { padding: 8px 12px 12px; display: flex; flex-direction: column; gap: 10px; }
+    .tool-step {
       display: grid;
       grid-template-columns: auto 1fr;
       gap: 8px 10px;
       align-items: start;
     }
-    .chain-step .badge {
+    .tool-step .badge {
       font-family: "IBM Plex Mono", ui-monospace, monospace;
       font-size: 10px;
-      padding: 2px 6px;
-      border: 1px solid var(--line);
-      color: var(--muted);
+      padding: 3px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--border-soft);
+      color: var(--text-muted);
       white-space: nowrap;
     }
-    .chain-step.think .badge { color: var(--ice); border-color: rgba(143, 212, 255, 0.35); }
-    .chain-step.tool .badge.native { color: var(--native); border-color: rgba(61, 206, 168, 0.35); }
-    .chain-step.tool .badge.wasm { color: var(--wasm); border-color: rgba(58, 160, 216, 0.35); }
-    .chain-step.tool .badge.script { color: var(--script); border-color: rgba(224, 122, 95, 0.35); }
-    .chain-step.tool .badge.process { color: #9b8bf2; border-color: rgba(155, 139, 242, 0.35); }
-    .chain-step .body {
+    .tool-step.think .badge { color: var(--accent); border-color: rgba(20,184,166,0.3); }
+    .tool-step.tool .badge.native { color: var(--native); border-color: rgba(52,211,153,0.3); }
+    .tool-step.tool .badge.wasm { color: var(--wasm); border-color: rgba(96,165,250,0.3); }
+    .tool-step.tool .badge.script { color: var(--script); border-color: rgba(251,146,60,0.3); }
+    .tool-step.tool .badge.process { color: var(--process); border-color: rgba(167,139,250,0.3); }
+    .tool-step .body {
       margin: 0;
       font-family: "IBM Plex Mono", ui-monospace, monospace;
       font-size: 11px;
-      line-height: 1.45;
-      color: var(--muted);
+      line-height: 1.5;
+      color: var(--text-muted);
       white-space: pre-wrap;
-      max-height: 160px;
+      max-height: 140px;
       overflow: auto;
     }
-    .chain-step.think .body { font-family: inherit; font-size: 12px; color: var(--ink); max-height: none; }
-    .composer {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 10px;
-      padding: 14px 20px 18px;
-      border-top: 1px solid var(--line);
-      background: var(--panel);
+    .tool-step.think .body {
+      font-family: inherit;
+      font-size: 13px;
+      color: var(--text);
+      max-height: none;
     }
-    .composer .prompts {
-      grid-column: 1 / -1;
-      margin-top: 0;
+    .composer {
+      flex: 0 0 auto;
+      padding: 12px 20px 20px;
+      background: linear-gradient(transparent, var(--bg) 20%);
+    }
+    .composer-inner {
+      max-width: var(--chat-max);
+      margin: 0 auto;
+    }
+    .prompts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 10px;
+      justify-content: center;
+    }
+    .prompt-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font: 12px/1.3 inherit;
+      padding: 6px 12px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text-secondary);
+      cursor: pointer;
+      border-radius: 999px;
+      transition: color 0.15s var(--ease), border-color 0.15s, background 0.15s, transform 0.1s;
+    }
+    .prompt-chip:hover {
+      color: var(--text);
+      border-color: #555;
+      background: var(--surface-hover);
+    }
+    .prompt-chip:active { transform: scale(0.97); }
+    .prompt-chip .icon { color: var(--accent); opacity: 0.75; }
+    .input-wrap {
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+      padding: 10px 10px 10px 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.25);
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .input-wrap:focus-within {
+      border-color: rgba(20, 184, 166, 0.35);
+      box-shadow: 0 4px 24px rgba(0,0,0,0.35), 0 0 0 1px rgba(20, 184, 166, 0.12);
     }
     textarea {
+      flex: 1;
       resize: none;
-      height: 72px;
-      background: var(--void);
-      color: var(--ink);
-      border: 1px solid var(--line);
-      padding: 10px 12px;
+      min-height: 24px;
+      max-height: 160px;
+      background: transparent;
+      color: var(--text);
+      border: none;
+      padding: 4px 0;
       font: inherit;
-      border-radius: 0;
+      line-height: 1.5;
     }
-    textarea:focus, button:focus-visible {
-      outline: 1px solid var(--ice);
-      outline-offset: 1px;
-    }
-    button {
-      background: var(--ice);
-      color: var(--void);
-      border: 0;
-      padding: 0 18px;
-      font: 600 12px/1 "IBM Plex Sans", sans-serif;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
+    textarea:focus { outline: none; }
+    textarea::placeholder { color: var(--text-muted); }
+    .send-btn {
+      position: relative;
+      flex-shrink: 0;
+      width: 36px;
+      height: 36px;
+      padding: 0;
+      display: grid;
+      place-items: center;
+      background: var(--accent);
+      color: #042f2e;
+      border: none;
+      border-radius: 50%;
       cursor: pointer;
+      transition: opacity 0.15s, transform 0.12s var(--ease), background 0.15s;
     }
-    button:disabled { opacity: 0.35; cursor: wait; }
+    .send-btn:hover:not(:disabled) {
+      opacity: 0.92;
+      transform: scale(1.05);
+      background: #2dd4bf;
+    }
+    .send-btn:active:not(:disabled) { transform: scale(0.96); }
+    .send-btn:disabled { opacity: 0.35; cursor: wait; }
+    .send-btn.loading svg { visibility: hidden; }
+    .send-btn.loading::after {
+      content: "";
+      position: absolute;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(4, 47, 46, 0.25);
+      border-top-color: #042f2e;
+      border-radius: 50%;
+      animation: spin 0.65s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
     .hint {
-      grid-column: 1 / -1;
-      font-size: 11px;
-      color: var(--muted);
-    }
-    .mode-toggle {
       margin-top: 8px;
+      text-align: center;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .hint kbd {
+      display: inline-block;
+      padding: 1px 5px;
+      font: 500 10px/1.4 "IBM Plex Mono", ui-monospace, monospace;
+      color: var(--text-secondary);
+      background: var(--surface);
+      border: 1px solid var(--border-soft);
+      border-radius: 4px;
+      box-shadow: 0 1px 0 rgba(0,0,0,0.2);
+    }
+    .typing-dots {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 2px;
+    }
+    .typing-dots span {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      animation: typingBounce 1.2s ease-in-out infinite;
+    }
+    .typing-dots span:nth-child(2) { animation-delay: 0.15s; }
+    .typing-dots span:nth-child(3) { animation-delay: 0.3s; }
+    @keyframes typingBounce {
+      0%, 60%, 100% { transform: translateY(0); opacity: 0.35; }
+      30% { transform: translateY(-5px); opacity: 1; }
+    }
+    .ide-panel-head {
+      flex: 0 0 auto;
       display: flex;
       align-items: center;
-      gap: 10px;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 10px 12px 8px;
+      border-bottom: 1px solid var(--border-soft);
+      background: var(--ide-sidebar);
+    }
+    .ide-panel-head .ide-section-title {
       font-size: 11px;
-      color: var(--muted);
-    }
-    .mode-toggle button {
-      padding: 4px 10px;
-      font-size: 10px;
+      font-weight: 600;
       letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+    }
+    .ide-panel-head .ide-section-meta {
+      font-size: 10px;
+      color: var(--text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 58%;
+    }
+    .workspace-picker {
+      flex: 0 0 auto;
+      padding: 0 12px 10px;
+      border-bottom: 1px solid var(--border-soft);
+      background: var(--ide-sidebar);
+    }
+    .workspace-picker-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .workspace-select {
+      flex: 1;
+      min-width: 0;
+      height: 32px;
+      padding: 0 28px 0 10px;
+      font: 400 11px/1 "IBM Plex Mono", ui-monospace, monospace;
+      color: var(--text-secondary);
+      background: var(--ide-editor) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5L6 7.5L9 4.5' stroke='%23737373' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 8px center;
+      border: 1px solid var(--border-soft);
+      border-radius: 6px;
+      appearance: none;
+      cursor: pointer;
+    }
+    .workspace-select:focus { outline: none; border-color: #555; }
+    .btn-workspace-open {
+      flex-shrink: 0;
+      width: 32px;
+      height: 32px;
+      border: 1px solid var(--border-soft);
+      border-radius: 6px;
+      background: var(--ide-editor);
+      color: var(--text-secondary);
+      font-size: 18px;
+      line-height: 1;
+      cursor: pointer;
+    }
+    .btn-workspace-open:hover { color: var(--text); border-color: #555; }
+    .ide-explorer {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      border-bottom: 1px solid var(--border-soft);
+      background: var(--ide-sidebar);
+    }
+    .ide-section-head {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 6px 12px 4px;
+      user-select: none;
+    }
+    .ide-section-title {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+    }
+    .ide-section-meta {
+      font-size: 10px;
+      color: var(--text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 55%;
+    }
+    .ide-workspace-root {
+      flex: 0 0 auto;
+      padding: 8px 12px 10px;
+      font-family: "IBM Plex Mono", ui-monospace, monospace;
+      font-size: 11px;
+      line-height: 1.4;
+      color: var(--text-secondary);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      border-bottom: 1px solid var(--border-soft);
+      background: var(--ide-sidebar);
+    }
+    .ide-footnote {
+      flex: 0 0 auto;
+      padding: 6px 12px 8px;
+      font-size: 10px;
+      color: var(--text-muted);
+      border-top: 1px solid var(--border-soft);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      background: var(--ide-sidebar);
+    }
+    .ide-editor {
+      flex: 0 1 42%;
+      min-height: 140px;
+      display: flex;
+      flex-direction: column;
+      background: var(--ide-editor);
+    }
+    .ide-editor.collapsed {
+      flex: 0 0 auto;
+      min-height: 0;
+    }
+    .ide-editor.collapsed .ide-tabbar,
+    .ide-editor.collapsed .ide-breadcrumb,
+    .ide-editor.collapsed .doc-scroll {
+      display: none;
+    }
+    .preview-placeholder {
+      padding: 20px 16px;
+      font-size: 12px;
+      color: var(--text-muted);
+      text-align: center;
+      line-height: 1.6;
+    }
+    .ide-tabbar {
+      flex: 0 0 auto;
+      display: flex;
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      min-height: 38px;
+      padding: 4px 6px 0;
+      gap: 2px;
+      background: #1a1a1a;
+      border-bottom: 1px solid var(--border-soft);
+      scrollbar-width: thin;
+    }
+    .ide-tabbar-label {
+      flex: 0 0 auto;
+      align-self: center;
+      padding: 0 8px 0 6px;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      user-select: none;
+    }
+    .tab-empty {
+      align-self: center;
+      padding: 0 10px 8px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .workspace-tab {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      max-width: 148px;
+      height: 32px;
+      padding: 0 10px;
+      font: 500 12px/1 "IBM Plex Sans", inherit;
+      border: 1px solid transparent;
+      border-bottom: none;
+      border-radius: 6px 6px 0 0;
       background: transparent;
-      color: var(--muted);
-      border: 1px solid var(--line);
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: background 0.12s, color 0.12s;
     }
-    .mode-toggle button.on.coding {
-      color: var(--native);
-      border-color: var(--native);
+    .workspace-tab .tab-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
-    .mode-toggle button.on.creation {
-      color: var(--script);
-      border-color: var(--script);
+    .workspace-tab .tab-file-icon { opacity: 0.85; }
+    .workspace-tab:hover {
+      color: var(--text);
+      background: var(--ide-list-hover);
     }
-    .source pre {
-      margin: 0;
+    .workspace-tab.active {
+      color: var(--text);
+      background: var(--ide-editor);
+      border-color: var(--border-soft);
+      box-shadow: inset 0 2px 0 var(--accent);
+    }
+    .workspace-tab.active .tab-file-icon { opacity: 1; }
+    .workspace-tree-head {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 8px 4px;
+    }
+    .workspace-tree-head .ide-section-meta {
+      flex: 1;
+      min-width: 0;
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+    .ide-section-head .tree-path {
+      flex: 1;
+      min-width: 0;
+      text-align: right;
+      font-family: "IBM Plex Mono", ui-monospace, monospace;
+      font-size: 10px;
+      color: var(--text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .tree-nav-btn {
+      flex-shrink: 0;
+      width: 22px;
+      height: 22px;
+      display: grid;
+      place-items: center;
+      border: none;
+      border-radius: 4px;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+    .tree-nav-btn:hover:not(:disabled) { background: var(--ide-list-hover); color: var(--text); }
+    .tree-nav-btn:disabled { opacity: 0.35; cursor: default; }
+    .tree-path {
+      flex: 1;
+      min-width: 0;
+      font-family: "IBM Plex Mono", ui-monospace, monospace;
+      font-size: 11px;
+      color: var(--text-secondary);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .workspace-tree {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: auto;
+      padding: 0 0 4px;
+    }
+    .workspace-tree::-webkit-scrollbar { width: 8px; }
+    .workspace-tree::-webkit-scrollbar-thumb { background: rgba(121, 121, 121, 0.4); border-radius: 4px; }
+    .workspace-tree::-webkit-scrollbar-thumb:hover { background: rgba(121, 121, 121, 0.6); }
+    .tree-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px 2px 4px;
+      margin: 0 4px;
+      border-radius: 4px;
+      font-size: 13px;
+      line-height: 22px;
+      cursor: pointer;
+      color: var(--text);
+      transition: background 0.1s;
+    }
+    .tree-item:hover { background: var(--ide-list-hover); }
+    .tree-item.active {
+      background: var(--ide-list-active);
+      color: var(--text);
+    }
+    .tree-chevron {
+      flex-shrink: 0;
+      width: 16px;
+      height: 16px;
+      display: grid;
+      place-items: center;
+      color: var(--text-muted);
+    }
+    .tree-chevron.spacer { visibility: hidden; }
+    .tree-name {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .tree-meta {
+      flex-shrink: 0;
+      font-family: "IBM Plex Mono", ui-monospace, monospace;
+      font-size: 10px;
+      color: var(--text-muted);
+      opacity: 0;
+      transition: opacity 0.12s;
+    }
+    .tree-item:hover .tree-meta { opacity: 1; }
+    .tree-item .icon-folder { color: var(--ide-folder); }
+    .tree-item .icon-file { color: var(--ide-file); }
+    .tree-item .icon-file-md { color: var(--ide-file-md); }
+    .tree-item .icon-file-rs { color: var(--ide-file-rs); }
+    .tree-item .icon-file-json { color: var(--ide-file-json); }
+    .tree-item .icon-file-html { color: var(--ide-file-html); }
+    .workspace-tab .icon-file-md { color: var(--ide-file-md); }
+    .workspace-tab .icon-file-rs { color: var(--ide-file-rs); }
+    .workspace-tab .icon-file-json { color: var(--ide-file-json); }
+    .workspace-tab .icon-file-html { color: var(--ide-file-html); }
+    .workspace-tab .icon-file { color: var(--ide-file); }
+    .tree-item.dir .tree-name { font-weight: 400; }
+    .tree-empty {
+      padding: 8px 16px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .ide-breadcrumb {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      font-family: "IBM Plex Mono", ui-monospace, monospace;
+      font-size: 11px;
+      color: var(--text-muted);
+      background: var(--ide-editor);
+      border-bottom: 1px solid var(--border-soft);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .ide-breadcrumb .bc-sep { opacity: 0.45; user-select: none; }
+    .ide-breadcrumb .bc-file { color: var(--text-secondary); }
+    .doc-plain {
+      font-family: "IBM Plex Mono", ui-monospace, monospace;
+      font-size: 12px;
+      line-height: 1.55;
       white-space: pre-wrap;
-      font: 12px/1.55 "IBM Plex Mono", ui-monospace, monospace;
-      color: var(--muted);
+      word-break: break-word;
+      color: #d4d4d4;
+      tab-size: 2;
+    }
+    .doc-scroll {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: auto;
+      padding: 0 0 16px;
+      background: var(--ide-editor);
+    }
+    .doc-scroll::-webkit-scrollbar { width: 10px; }
+    .doc-scroll::-webkit-scrollbar-thumb { background: rgba(121, 121, 121, 0.4); border-radius: 4px; }
+    .doc-scroll::-webkit-scrollbar-thumb:hover { background: rgba(121, 121, 121, 0.6); }
+    #doc-text {
+      padding: 12px 16px 0;
+      min-height: 100%;
     }
     .md-body {
       font-size: 13px;
-      line-height: 1.55;
-      color: var(--muted);
+      line-height: 1.65;
+      color: #cccccc;
       word-wrap: break-word;
     }
     .md-body :first-child { margin-top: 0; }
     .md-body :last-child { margin-bottom: 0; }
     .md-body h1, .md-body h2, .md-body h3, .md-body h4 {
-      color: var(--ink);
+      color: var(--text);
       font-weight: 600;
-      line-height: 1.3;
-      margin: 1.1em 0 0.5em;
+      line-height: 1.35;
+      margin: 1.1em 0 0.45em;
     }
-    .md-body h1 { font-size: 1.35em; }
-    .md-body h2 { font-size: 1.15em; }
-    .md-body h3 { font-size: 1.05em; }
-    .md-body p { margin: 0.65em 0; }
-    .md-body ul, .md-body ol {
-      margin: 0.5em 0;
-      padding-left: 1.35em;
-    }
-    .md-body li { margin: 0.25em 0; }
-    .md-body a {
-      color: var(--ice);
-      text-decoration: none;
-    }
+    .md-body h1 { font-size: 1.3em; }
+    .md-body h2 { font-size: 1.12em; }
+    .md-body h3 { font-size: 1.02em; }
+    .md-body p { margin: 0.6em 0; }
+    .md-body ul, .md-body ol { margin: 0.45em 0; padding-left: 1.3em; }
+    .md-body li { margin: 0.2em 0; }
+    .md-body a { color: var(--accent); text-decoration: none; }
     .md-body a:hover { text-decoration: underline; }
     .md-body code {
       font-family: "IBM Plex Mono", ui-monospace, monospace;
-      font-size: 0.9em;
-      background: rgba(143, 212, 255, 0.08);
-      color: var(--ice);
-      padding: 0.1em 0.35em;
-      border-radius: 2px;
+      font-size: 0.88em;
+      background: var(--surface-2);
+      color: var(--accent);
+      padding: 0.12em 0.4em;
+      border-radius: 4px;
     }
     .md-body pre {
-      margin: 0.75em 0;
-      padding: 10px 12px;
-      background: var(--void);
-      border: 1px solid var(--line);
+      margin: 0.7em 0;
+      padding: 12px 14px;
+      background: #252526;
+      border: 1px solid var(--border-soft);
+      border-radius: 4px;
       overflow-x: auto;
-      font: 11px/1.45 "IBM Plex Mono", ui-monospace, monospace;
-      color: var(--ink);
+      font: 12px/1.5 "IBM Plex Mono", ui-monospace, monospace;
+      color: #d4d4d4;
     }
-    .md-body pre code {
-      background: none;
-      padding: 0;
-      color: inherit;
-    }
+    .md-body pre code { background: none; padding: 0; color: inherit; }
     .md-body blockquote {
-      margin: 0.75em 0;
+      margin: 0.65em 0;
       padding-left: 12px;
-      border-left: 3px solid var(--line);
-      color: var(--muted);
+      border-left: 3px solid var(--border);
+      color: var(--text-muted);
     }
-    .md-body table {
-      border-collapse: collapse;
-      width: 100%;
-      margin: 0.75em 0;
-      font-size: 12px;
-    }
-    .md-body th, .md-body td {
-      border: 1px solid var(--line);
-      padding: 6px 10px;
-      text-align: left;
-    }
-    .md-body th {
-      color: var(--ink);
-      background: rgba(26, 51, 64, 0.5);
-    }
-    .md-body hr {
-      border: 0;
-      border-top: 1px solid var(--line);
-      margin: 1em 0;
-    }
-    .msg .body.md-body { color: var(--ink); max-width: 44em; }
-    .pulse { animation: pulse 1.1s ease-in-out infinite; }
-    @keyframes pulse { 50% { opacity: 0.45; } }
+    .md-body table { border-collapse: collapse; width: 100%; margin: 0.65em 0; font-size: 12px; }
+    .md-body th, .md-body td { border: 1px solid var(--border-soft); padding: 6px 10px; text-align: left; }
+    .md-body th { color: var(--text); background: var(--surface); }
+    .md-body hr { border: 0; border-top: 1px solid var(--border-soft); margin: 1em 0; }
+    .msg-bubble.md-body { color: var(--text); }
+    .pulse .msg-bubble { color: var(--text-muted); }
+    .pulse { animation: pulse 1.2s ease-in-out infinite; }
+    @keyframes pulse { 50% { opacity: 0.5; } }
     @media (prefers-reduced-motion: reduce) {
+      .msg-row { animation: none; }
       .pulse { animation: none; }
+      .typing-dots span { animation: none; opacity: 0.6; }
     }
-    @media (max-width: 960px) {
+    @media (max-width: 1280px) {
+      body {
+        grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+      }
+      .doc-panel {
+        position: fixed;
+        top: 0;
+        right: 0;
+        width: min(var(--doc-w), 92vw);
+        z-index: 100;
+        transform: translateX(100%);
+        transition: transform 0.22s var(--ease);
+        box-shadow: -8px 0 32px rgba(0, 0, 0, 0.5);
+      }
+      body.workspace-drawer-open .doc-panel {
+        transform: translateX(0);
+      }
+    }
+    @media (min-width: 1281px) {
+      .btn-workspace { display: none; }
+      .workspace-backdrop { display: none !important; }
+    }
+    @media (max-width: 720px) {
       body { grid-template-columns: 1fr; }
-      .rail, .source { display: none; }
+      .sidebar { display: none; }
+      .tool-panel { padding-left: 20px; }
     }
   </style>
 </head>
 <body>
-  <aside class="rail">
-    <div class="pane-head">
-      <p class="eyebrow">fiber tree</p>
-      <h1 class="brand">SPATIOTEMPORAL</h1>
+  <aside class="sidebar">
+    <div class="sidebar-top">
+      <div class="brand">
+        <div class="brand-icon" id="brand-icon"></div>
+        <div class="brand-name">Spatiotemporal</div>
+      </div>
+      <button type="button" class="btn-new-chat" id="new-session-btn">
+        <span class="icon icon-sm" id="new-chat-icon"></span>
+        新对话
+      </button>
     </div>
-    <div class="scroll">
-      <div class="group">
-        <p class="eyebrow">sessions</p>
-        <button type="button" class="session-new" id="new-session-btn">+ 新会话</button>
-        <div id="sessions"></div>
-      </div>
-      <div class="group">
-        <p class="eyebrow">plugins</p>
-        <div id="plugins"></div>
-      </div>
-      <div class="group">
-        <p class="eyebrow">tools</p>
-        <div id="tools"></div>
-      </div>
+    <div class="sidebar-scroll">
+      <p class="sidebar-label"><span class="icon icon-sm" id="history-label-icon"></span>历史</p>
+      <div id="sessions"></div>
+      <details class="sidebar-details" open>
+        <summary>
+          <span class="summary-left"><span class="icon icon-sm" id="plugins-label-icon"></span>插件</span>
+          <span class="summary-chevron icon icon-sm" id="plugins-chevron"></span>
+        </summary>
+        <div class="items" id="plugins"></div>
+      </details>
+      <details class="sidebar-details" open>
+        <summary>
+          <span class="summary-left"><span class="icon icon-sm" id="tools-label-icon"></span>工具</span>
+          <span class="summary-chevron icon icon-sm" id="tools-chevron"></span>
+        </summary>
+        <div class="items" id="tools"></div>
+      </details>
     </div>
   </aside>
+
   <main class="stage">
-    <div class="pane-head">
-      <p class="eyebrow">session</p>
-      <div class="bus" id="bus"></div>
-      <div class="status" id="model"></div>
-      <div class="mode-toggle">
-        <span>模式</span>
-        <button type="button" id="mode-btn" title="点击切换：标准 → 编码 → 创造">标准</button>
+    <header class="chat-header">
+      <div class="chat-header-left">
+        <div class="model-line">
+          <span class="status-dot" id="status-dot"></span>
+          <div class="model-badge" id="model">加载中…</div>
+        </div>
+        <div class="bus-mini" id="bus"></div>
       </div>
-      <div class="approval" id="approval" hidden>
-        <p class="title">待审批</p>
-        <div id="approval-list"></div>
-        <pre id="approval-preview"></pre>
-        <div class="actions">
-          <button type="button" id="approve-btn">批准</button>
-          <button type="button" class="reject" id="reject-btn">拒绝</button>
+      <button type="button" class="btn-workspace" id="workspace-toggle" aria-pressed="false" title="浏览项目目录">
+        <span class="icon icon-sm" id="workspace-toggle-icon"></span>
+        <span>项目目录</span>
+      </button>
+    </header>
+    <div class="workspace-backdrop" id="workspace-backdrop" aria-hidden="true"></div>
+    <div class="approval-banner" id="approval" hidden>
+      <p class="approval-title"><span class="icon icon-sm" id="approval-icon"></span>待审批</p>
+      <div id="approval-list"></div>
+      <pre id="approval-preview"></pre>
+      <div class="approval-actions">
+        <button type="button" id="approve-btn"><span class="icon icon-sm" id="approve-icon"></span>批准</button>
+        <button type="button" class="reject" id="reject-btn"><span class="icon icon-sm" id="reject-icon"></span>拒绝</button>
+      </div>
+    </div>
+    <div class="chat-scroll" id="log-wrap">
+      <div id="log">
+        <div class="empty" id="empty">
+          <div class="empty-icon" id="empty-icon"></div>
+          <h2>有什么可以帮你的？</h2>
+          <p>你在<strong>项目工作区</strong>内对话（启动 agent 时的文件夹）。<br />右侧可浏览目录；用 read / bash 操作文件。</p>
         </div>
       </div>
     </div>
-    <div class="scroll" id="log">
-      <div class="empty" id="empty">
-        问这篇 demo 文档。讲解员应先调工具再回答。<br />
-        试玩 prompt 在下方输入框上方；完整脚本见 <code>spatiotemporal-agent/DEMO.md</code>
-      </div>
-    </div>
     <form class="composer" id="form">
-      <div class="prompts" id="prompts"></div>
-      <textarea id="input" placeholder="问这篇文档" required></textarea>
-      <button type="submit">发送</button>
-      <div class="hint">Enter 发送 · Shift+Enter 换行</div>
+      <div class="composer-inner">
+        <div class="prompts" id="prompts"></div>
+        <div class="composer-row">
+          <div class="mode-wrap" id="mode-wrap">
+            <span class="mode-icon icon icon-sm" id="mode-icon"></span>
+            <select id="mode-select" class="mode-select" aria-label="模式">
+              <option value="standard">标准</option>
+              <option value="coding">编码</option>
+              <option value="creation">创造</option>
+            </select>
+          </div>
+          <div class="input-wrap">
+            <textarea id="input" placeholder="输入消息…" rows="1" required></textarea>
+            <button type="submit" class="send-btn" aria-label="发送">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 19V5M12 5l-5 5M12 5l5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="hint"><kbd>Enter</kbd> 发送 · <kbd>Shift</kbd>+<kbd>Enter</kbd> 换行</div>
+      </div>
     </form>
   </main>
-  <section class="source">
-    <div class="pane-head">
-      <p class="eyebrow">source</p>
-      <div class="brand" id="doc-name">markdown</div>
+
+  <section class="doc-panel">
+    <div class="ide-panel-head">
+      <span class="ide-section-title">工作区</span>
+      <span class="ide-section-meta" id="workspace-stats">—</span>
     </div>
-    <div class="scroll"><div id="doc-text" class="md-body">加载文档…</div></div>
+    <div class="workspace-picker">
+      <div class="workspace-picker-row">
+        <select id="workspace-select" class="workspace-select" aria-label="切换项目文件夹"></select>
+        <button type="button" class="btn-workspace-open" id="workspace-open" title="打开文件夹">+</button>
+      </div>
+    </div>
+    <div class="ide-explorer">
+      <div class="workspace-tree-head">
+        <button type="button" class="tree-nav-btn" id="tree-up" title="上级目录" aria-label="上级目录"></button>
+        <span class="tree-path" id="tree-path">/</span>
+      </div>
+      <div class="workspace-tree" id="workspace-tree"></div>
+    </div>
   </section>
+
   <script src="https://cdn.jsdelivr.net/npm/marked@15.0.7/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.4/dist/purify.min.js"></script>
   <script>
     const logEl = document.getElementById("log");
+    const logWrap = document.getElementById("log-wrap");
     const emptyEl = document.getElementById("empty");
     const history = [];
-    const SESSION_KEY = "spatiotemporal-session";
-    let sessionId = localStorage.getItem(SESSION_KEY) || "";
+    const SESSION_PREFIX = "spatiotemporal-session:";
+    let sessionId = "";
     const toolSubstrates = {};
     const $ = (sel) => document.querySelector(sel);
+
+    const ICONS = {
+      logo: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>`,
+      plus: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>`,
+      history: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3l2 1.5"/></svg>`,
+      plugin: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1"/><rect x="9" y="2.5" width="4.5" height="4.5" rx="1"/><rect x="2.5" y="9" width="4.5" height="4.5" rx="1"/><path d="M11.25 9v4.5M9 11.25h4.5"/></svg>`,
+      tool: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M10.5 2.5l3 3-6 6H4.5v-3l6-6z"/><path d="M9 4l3 3"/></svg>`,
+      chevron: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 4l4 4-4 4"/></svg>`,
+      message: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2.5 3.5h11v7h-3.5L6.5 13v-2.5h-4V3.5z"/></svg>`,
+      trash: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 4.5h10M5.5 4.5V3.5h5v1M6 4.5v8M10 4.5v8M4 4.5l.5 8.5h7L12 4.5"/></svg>`,
+      user: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5.5" r="2.5"/><path d="M3.5 13c0-2.5 2-4 4.5-4s4.5 1.5 4.5 4"/></svg>`,
+      bot: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="4" width="10" height="8" rx="2"/><path d="M6 4V2.5M10 4V2.5M3 7.5h10M6 10h1M9 10h1"/></svg>`,
+      spark: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 2v2M8 12v2M2 8h2M12 8h2M4.2 4.2l1.4 1.4M10.4 10.4l1.4 1.4M4.2 11.8l1.4-1.4M10.4 5.6l1.4-1.4"/><circle cx="8" cy="8" r="2"/></svg>`,
+      wrench: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M11 2.5a3 3 0 00-3.6 3.6L3 10.5V13h2.5l4.4-4.4A3 3 0 0011 2.5z"/></svg>`,
+      file: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 2.5h5l3 3v8H4V2.5z"/><path d="M9 2.5v3.5h3"/></svg>`,
+      folder: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2.5 4.5h4l1.5 1.5H13.5v7H2.5V4.5z"/></svg>`,
+      chat: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M4 5.5h16v10H8l-4 3.5V5.5z"/></svg>`,
+      alert: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="5.5"/><path d="M8 5.5v3M8 10.5h.01"/></svg>`,
+      check: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M3.5 8.5l3 3 6-6"/></svg>`,
+      x: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>`,
+      shield: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 2.5l4.5 2v4c0 3-2 5-4.5 5.5C7 13 5 11 5 8.5v-4L8 2.5z"/></svg>`,
+      modeStandard: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3l2 1.5"/></svg>`,
+      modeCoding: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M5 5l-2.5 3L5 11M11 5l2.5 3L11 11M9 3l-2 10"/></svg>`,
+      modeCreation: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 3v10M3 8h10"/><circle cx="8" cy="8" r="5.5"/></svg>`,
+      folderOpen: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2.5 4.5h4l1.5 1.5H13.5v7H2.5V4.5z"/></svg>`,
+      levelUp: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 3v7M8 3L5.5 5.5M8 3l2.5 2.5M3 13h10"/></svg>`,
+    };
+
+    let workspaceRoot = "";
+    let workspaceRecent = [];
+    let treePath = "";
+    let treeParent = null;
+
+    function sessionStorageKey() {
+      return SESSION_PREFIX + (workspaceRoot || "default");
+    }
+
+    function loadSessionIdForWorkspace() {
+      sessionId = localStorage.getItem(sessionStorageKey()) || "";
+    }
+
+    function clearChat() {
+      history.length = 0;
+      rebuildLogFromSession([]);
+    }
+
+    function saveSessionIdForWorkspace() {
+      if (sessionId) localStorage.setItem(sessionStorageKey(), sessionId);
+      else localStorage.removeItem(sessionStorageKey());
+    }
+
+    function setIcon(el, name) {
+      if (!el) return;
+      el.innerHTML = ICONS[name] || "";
+    }
+
+    function mountStaticIcons() {
+      setIcon($("#brand-icon"), "logo");
+      setIcon($("#new-chat-icon"), "plus");
+      setIcon($("#history-label-icon"), "history");
+      setIcon($("#plugins-label-icon"), "plugin");
+      setIcon($("#tools-label-icon"), "tool");
+      setIcon($("#plugins-chevron"), "chevron");
+      setIcon($("#tools-chevron"), "chevron");
+      setIcon($("#empty-icon"), "chat");
+      setIcon($("#approval-icon"), "shield");
+      setIcon($("#approve-icon"), "check");
+      setIcon($("#reject-icon"), "x");
+      setIcon($("#tree-up"), "levelUp");
+      setIcon($("#workspace-toggle-icon"), "folderOpen");
+      updateModeIcon("standard");
+    }
+
+    function basename(path) {
+      if (!path) return "";
+      const parts = path.split(/[/\\]/);
+      return parts[parts.length - 1] || path;
+    }
+
+    function fileIconClass(name) {
+      const ext = (name.split(".").pop() || "").toLowerCase();
+      if (ext === "md" || ext === "markdown") return "icon-file-md";
+      if (ext === "rs") return "icon-file-rs";
+      if (ext === "json" || ext === "yml" || ext === "yaml" || ext === "toml") return "icon-file-json";
+      if (ext === "html" || ext === "htm") return "icon-file-html";
+      return "icon-file";
+    }
+
+    function formatFileSize(bytes) {
+      if (bytes == null || bytes < 0) return "";
+      if (bytes < 1024) return `${bytes} B`;
+      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`;
+      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    }
+
+    function formatEntryMeta(entry) {
+      if (entry.kind === "dir" && entry.count != null) return `${entry.count} 项`;
+      if (entry.kind === "file" && entry.size != null) return formatFileSize(entry.size);
+      return "";
+    }
+
+    function updateTreeUpButton() {
+      const btn = $("#tree-up");
+      if (!btn) return;
+      btn.disabled = !treePath;
+    }
+
+    function updateWorkspaceStats(text) {
+      const el = $("#workspace-stats");
+      if (el) el.textContent = text || "—";
+    }
+
+    function renderWorkspaceSelect() {
+      const sel = $("#workspace-select");
+      if (!sel) return;
+      const paths = [...new Set([workspaceRoot, ...workspaceRecent].filter(Boolean))];
+      sel.replaceChildren();
+      paths.forEach((path) => {
+        const opt = document.createElement("option");
+        opt.value = path;
+        opt.textContent = basename(path);
+        opt.title = path;
+        if (path === workspaceRoot) opt.selected = true;
+        sel.appendChild(opt);
+      });
+    }
+
+    function workspaceDrawerOpen() {
+      return document.body.classList.contains("workspace-drawer-open");
+    }
+
+    function setWorkspaceDrawer(open) {
+      const on = !!open;
+      document.body.classList.toggle("workspace-drawer-open", on);
+      const btn = $("#workspace-toggle");
+      const backdrop = $("#workspace-backdrop");
+      if (btn) btn.classList.toggle("active", on);
+      if (btn) btn.setAttribute("aria-pressed", on ? "true" : "false");
+      if (backdrop) backdrop.setAttribute("aria-hidden", on ? "false" : "true");
+    }
+
+    function toggleWorkspaceDrawer() {
+      setWorkspaceDrawer(!workspaceDrawerOpen());
+    }
+
+    async function fetchWorkspaces() {
+      const res = await fetch("/api/workspaces");
+      return res.json();
+    }
+
+    async function switchWorkspace(path) {
+      const res = await fetch("/api/workspaces/switch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "切换工作区失败");
+      await applyWorkspace(data.workspace);
+    }
+
+    async function applyWorkspace(path) {
+      workspaceRoot = path;
+      const ws = await fetchWorkspaces();
+      workspaceRecent = ws.recent || [];
+      if (ws.current) workspaceRoot = ws.current;
+      loadSessionIdForWorkspace();
+      renderWorkspaceSelect();
+      treePath = "";
+      await loadWorkspaceTree("");
+      await loadSessionList();
+      if (sessionId) await loadSession();
+      else {
+        clearChat();
+        await newSession();
+      }
+      await refreshStatus();
+    }
+
+    async function promptOpenWorkspace() {
+      const path = window.prompt("输入项目文件夹的绝对路径：", workspaceRoot || "");
+      if (!path || !path.trim()) return;
+      try {
+        await switchWorkspace(path.trim());
+      } catch (err) {
+        add("系统", String(err), "err");
+      }
+    }
+
+    async function loadWorkspaceTree(path) {
+      treePath = path || "";
+      const treeEl = document.getElementById("workspace-tree");
+      const pathEl = document.getElementById("tree-path");
+      if (!treeEl) return;
+      treeEl.innerHTML = '<div class="tree-empty">加载中…</div>';
+      try {
+        const q = treePath ? `?path=${encodeURIComponent(treePath)}` : "";
+        const res = await fetch(`/api/workspace/list${q}`);
+        const data = await res.json();
+        if (!res.ok) {
+          treeEl.innerHTML = `<div class="tree-empty">${escapeHtml(data.error || "无法列出目录")}</div>`;
+          updateWorkspaceStats("—");
+          return;
+        }
+        treeParent = data.parent ?? null;
+        updateTreeUpButton();
+        if (pathEl) pathEl.textContent = treePath ? treePath : "/";
+        treeEl.replaceChildren();
+        const entries = data.entries || [];
+        const dirs = entries.filter((e) => e.kind === "dir").length;
+        const files = entries.filter((e) => e.kind === "file").length;
+        updateWorkspaceStats(`${dirs} 文件夹 · ${files} 文件`);
+        if (!entries.length) {
+          const empty = document.createElement("div");
+          empty.className = "tree-empty";
+          empty.textContent = "空目录";
+          treeEl.appendChild(empty);
+          return;
+        }
+        entries.forEach((entry) => {
+          const row = document.createElement("div");
+          row.className = "tree-item " + entry.kind;
+          const chevron =
+            entry.kind === "dir"
+              ? `<span class="tree-chevron icon icon-sm">${ICONS.chevron}</span>`
+              : `<span class="tree-chevron spacer"></span>`;
+          const iconClass =
+            entry.kind === "dir" ? "icon-folder" : fileIconClass(entry.name);
+          const icon = entry.kind === "dir" ? ICONS.folder : ICONS.file;
+          const meta = formatEntryMeta(entry);
+          row.innerHTML =
+            chevron +
+            `<span class="icon icon-sm ${iconClass}">${icon}</span>` +
+            `<span class="tree-name">${escapeHtml(entry.name)}</span>` +
+            (meta ? `<span class="tree-meta">${escapeHtml(meta)}</span>` : "");
+          if (entry.kind === "dir") {
+            row.addEventListener("click", () => loadWorkspaceTree(entry.path));
+          }
+          treeEl.appendChild(row);
+        });
+      } catch (err) {
+        treeEl.innerHTML = `<div class="tree-empty">${escapeHtml(String(err))}</div>`;
+        updateWorkspaceStats("—");
+      }
+    }
+
+    async function initWorkspace(status) {
+      workspaceRoot = status.workspace || "";
+      try {
+        const ws = await fetchWorkspaces();
+        workspaceRecent = ws.recent || [];
+        if (ws.current) workspaceRoot = ws.current;
+      } catch {
+        workspaceRecent = workspaceRoot ? [workspaceRoot] : [];
+      }
+      loadSessionIdForWorkspace();
+      renderWorkspaceSelect();
+      updateTreeUpButton();
+      await loadWorkspaceTree("");
+    }
+
+    function updateModeIcon(profile) {
+      const p = profile || "standard";
+      const key = p === "coding" ? "modeCoding" : p === "creation" ? "modeCreation" : "modeStandard";
+      setIcon($("#mode-icon"), key);
+      const wrap = $("#mode-wrap");
+      if (wrap) {
+        wrap.classList.remove("coding", "creation");
+        if (p === "coding") wrap.classList.add("coding");
+        else if (p === "creation") wrap.classList.add("creation");
+      }
+    }
+
+    function typingDotsHtml() {
+      return '<span class="typing-dots" aria-label="思考中"><span></span><span></span><span></span></span>';
+    }
+
+    mountStaticIcons();
+
+    function scrollToBottom() {
+      if (logWrap) logWrap.scrollTop = logWrap.scrollHeight;
+    }
 
     function renderPluginsAndTools(status) {
       const pluginsEl = document.getElementById("plugins");
@@ -584,16 +1655,29 @@
       if (!pluginsEl || !toolsEl) return;
       pluginsEl.replaceChildren();
       toolsEl.replaceChildren();
-      (status.plugins || []).forEach((p) => pluginsEl.appendChild(card(p, p.role)));
-      (status.tools || []).forEach((t) => toolsEl.appendChild(card(t)));
+      (status.plugins || []).forEach((p) => pluginsEl.appendChild(itemRow(p, p.role)));
+      (status.tools || []).forEach((t) => toolsEl.appendChild(itemRow(t)));
     }
 
-    function card(item, extra) {
+    function renderRuntimeSidebar(status) {
+      renderPluginsAndTools(status);
+      const bus = $("#bus");
+      if (!bus) return;
+      bus.replaceChildren();
+      (status.plugins || []).forEach((p) => {
+        const chip = document.createElement("span");
+        chip.className = "chip";
+        chip.textContent = p.name;
+        bus.appendChild(chip);
+      });
+    }
+
+    function itemRow(item, extra) {
       const div = document.createElement("div");
-      div.className = "card " + (item.substrate || "");
-      div.innerHTML = `<span class="led"></span>
-        <div class="name">${escapeHtml(item.name)}</div>
-        <div class="meta">${escapeHtml(item.substrate)} · ${escapeHtml(extra || item.description || item.role || "")}</div>`;
+      div.className = "item-row " + (item.substrate || "");
+      div.innerHTML = `<span class="item-dot"></span>
+        <div><div class="item-name">${escapeHtml(item.name)}</div>
+        <div class="item-meta">${escapeHtml(item.substrate)} · ${escapeHtml(extra || item.description || item.role || "")}</div></div>`;
       return div;
     }
 
@@ -603,17 +1687,14 @@
         if (!res.ok) return;
         const data = await res.json();
         renderSessionList(data.sessions || []);
-      } catch {
-        /* 忽略 */
-      }
+      } catch { /* 忽略 */ }
     }
 
     function formatSessionTime(ms) {
       if (!ms) return "";
       const date = new Date(ms);
       const now = new Date();
-      const sameDay = date.toDateString() === now.toDateString();
-      if (sameDay) {
+      if (date.toDateString() === now.toDateString()) {
         return date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
       }
       return date.toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" });
@@ -625,11 +1706,12 @@
       root.replaceChildren();
       const list = Array.isArray(sessions) ? sessions.slice() : [];
       if (sessionId && !list.some((item) => item.id === sessionId)) {
-        list.unshift({ id: sessionId, title: "新会话", turns: 0, updated_at: Date.now() });
+        list.unshift({ id: sessionId, title: "新对话", turns: 0, updated_at: Date.now() });
       }
       if (!list.length) {
         const empty = document.createElement("div");
         empty.className = "session-meta";
+        empty.style.padding = "4px 10px";
         empty.textContent = "暂无会话";
         root.appendChild(empty);
         return;
@@ -637,20 +1719,67 @@
       list.forEach((item) => {
         const row = document.createElement("div");
         row.className = "session-item" + (item.id === sessionId ? " active" : "");
-        row.innerHTML = `<div class="session-title">${escapeHtml(item.title || "新会话")}</div>
-          <div class="session-meta">${item.turns || 0} 轮 · ${formatSessionTime(item.updated_at)}</div>`;
-        row.addEventListener("click", () => switchSession(item.id));
+        const body = document.createElement("div");
+        body.className = "session-item-body";
+        body.innerHTML = `<div class="session-line">
+          <span class="session-glyph icon icon-sm">${ICONS.message}</span>
+          <div class="session-text">
+            <div class="session-title">${escapeHtml(item.title || "新对话")}</div>
+            <div class="session-meta">${item.turns || 0} 轮 · ${formatSessionTime(item.updated_at)}</div>
+          </div>
+        </div>`;
+        body.addEventListener("click", () => switchSession(item.id));
+        const del = document.createElement("button");
+        del.type = "button";
+        del.className = "session-delete";
+        del.title = "删除会话";
+        del.setAttribute("aria-label", "删除会话");
+        del.innerHTML = `<span class="icon icon-sm">${ICONS.trash}</span>`;
+        del.addEventListener("click", (event) => deleteSession(item.id, event));
+        row.appendChild(body);
+        row.appendChild(del);
         root.appendChild(row);
       });
+    }
+
+    async function deleteSession(id, event) {
+      event.stopPropagation();
+      if (!confirm("删除此会话？不可恢复。")) return;
+      try {
+        const res = await fetch(
+          `/api/session?session_id=${encodeURIComponent(id)}`,
+          { method: "DELETE" }
+        );
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok && res.status !== 404) {
+          add("系统", data.error || "删除失败", "err");
+          return;
+        }
+        if (id === sessionId) {
+          sessionId = "";
+          saveSessionIdForWorkspace();
+          clearChat();
+          const listRes = await fetch("/api/sessions");
+          const listData = await listRes.json().catch(() => ({}));
+          const remaining = listData.sessions || [];
+          if (remaining.length) await switchSession(remaining[0].id);
+          else await newSession();
+        } else {
+          await loadSessionList();
+        }
+      } catch (err) {
+        add("系统", String(err), "err");
+      }
     }
 
     async function switchSession(id) {
       if (!id || id === sessionId) return;
       sessionId = id;
-      localStorage.setItem(SESSION_KEY, sessionId);
-      history.length = 0;
+      saveSessionIdForWorkspace();
+      clearChat();
       await loadSession();
       await loadSessionList();
+      await refreshStatus();
       $("#input").focus();
     }
 
@@ -663,10 +1792,10 @@
           return;
         }
         sessionId = data.session_id;
-        localStorage.setItem(SESSION_KEY, sessionId);
-        history.length = 0;
-        rebuildLogFromSession([]);
+        saveSessionIdForWorkspace();
+        clearChat();
         await loadSessionList();
+        await refreshStatus();
         $("#input").focus();
       } catch (err) {
         add("系统", String(err), "err");
@@ -681,11 +1810,8 @@
         const data = await res.json();
         history.length = 0;
         history.push(...(data.history || []));
-        const turns = buildTurns(data.history || [], data.events || []);
-        rebuildLogFromSession(turns);
-      } catch {
-        /* 忽略 */
-      }
+        rebuildLogFromSession(buildTurns(data.history || [], data.events || []));
+      } catch { /* 忽略 */ }
     }
 
     function substrateFor(tool) {
@@ -695,12 +1821,19 @@
     function buildTurns(messages, events) {
       const turns = reconstructTurnsFromHistory(messages);
       const stepEvents = (events || []).filter((e) => e.kind === "turn_steps");
-      if (stepEvents.length === turns.length) {
-        turns.forEach((turn, idx) => {
-          const saved = stepEvents[idx]?.steps;
-          if (Array.isArray(saved) && saved.length) turn.steps = saved;
-        });
-      }
+      let eventIdx = 0;
+      turns.forEach((turn) => {
+        const hasTools = turn.steps.some((s) => s.kind === "tool");
+        if (!hasTools) return;
+        while (eventIdx < stepEvents.length) {
+          const saved = stepEvents[eventIdx]?.steps;
+          eventIdx += 1;
+          if (Array.isArray(saved) && saved.length) {
+            turn.steps = saved;
+            break;
+          }
+        }
+      });
       return turns;
     }
 
@@ -708,10 +1841,7 @@
       const turns = [];
       let i = 0;
       while (i < messages.length) {
-        if (messages[i].role !== "user") {
-          i += 1;
-          continue;
-        }
+        if (messages[i].role !== "user") { i += 1; continue; }
         const userText = messages[i].content || "";
         i += 1;
         const steps = [];
@@ -723,9 +1853,7 @@
             const calls = msg.tool_calls;
             if (Array.isArray(calls) && calls.length) {
               const content = String(msg.content || "").trim();
-              if (content) {
-                steps.push({ kind: "think", round: steps.length + 1, text: content });
-              }
+              if (content) steps.push({ kind: "think", round: steps.length + 1, text: content });
               const toolResults = {};
               let j = i;
               while (j < messages.length && messages[j].role === "tool") {
@@ -733,12 +1861,11 @@
                 j += 1;
               }
               calls.forEach((call) => {
-                const name = call.function?.name || "?";
                 steps.push({
                   kind: "tool",
                   round: steps.length + 1,
-                  tool: name,
-                  substrate: substrateFor(name),
+                  tool: call.function?.name || "?",
+                  substrate: substrateFor(call.function?.name || "?"),
                   input: call.function?.arguments || "",
                   output: toolResults[call.id] || "",
                 });
@@ -767,19 +1894,31 @@
       }
       turns.forEach((turn) => {
         add("你", turn.user, "user");
-        const chain = renderChain(turn.steps);
-        if (chain) logEl.appendChild(chain);
-        if (turn.reply) add("讲解员", turn.reply);
+        const chain = renderChain(turn.steps, true);
+        if (chain) appendToolPanel(chain);
+        if (turn.reply) add("Agent", turn.reply);
       });
-      logEl.scrollTop = logEl.scrollHeight;
+      scrollToBottom();
     }
 
-    function renderChain(steps) {
+    function appendToolPanel(chainEl) {
+      const wrap = document.createElement("div");
+      wrap.className = "tool-panel";
+      wrap.appendChild(chainEl);
+      logEl.appendChild(wrap);
+    }
+
+    function renderChain(steps, collapsed) {
       if (!Array.isArray(steps) || !steps.length) return null;
-      const chain = document.createElement("div");
-      chain.className = "chain";
+      const details = document.createElement("details");
+      if (collapsed) details.open = false;
+
+      const summary = document.createElement("summary");
+      const toolCount = steps.filter((s) => s.kind === "tool").length;
+      summary.innerHTML = `<span class="summary-icon icon icon-sm">${ICONS.wrench}</span><span>工具调用 · ${toolCount || steps.length} 步</span><span class="chevron icon icon-sm">${ICONS.chevron}</span>`;
+
       const bus = document.createElement("div");
-      bus.className = "chain-bus";
+      bus.className = "tool-bus";
       steps.forEach((step, idx) => {
         if (idx) {
           const arrow = document.createElement("span");
@@ -798,28 +1937,27 @@
         }
         bus.appendChild(node);
       });
-      chain.appendChild(bus);
-      const head = document.createElement("div");
-      head.className = "chain-head";
-      head.textContent = `工具链路 · ${steps.length} 步`;
-      chain.appendChild(head);
+
       const stepsEl = document.createElement("div");
-      stepsEl.className = "chain-steps";
+      stepsEl.className = "tool-steps";
       steps.forEach((step) => stepsEl.appendChild(renderChainStep(step)));
-      chain.appendChild(stepsEl);
-      return chain;
+
+      details.appendChild(summary);
+      details.appendChild(bus);
+      details.appendChild(stepsEl);
+      return details;
     }
 
     function renderChainStep(step) {
       const el = document.createElement("div");
       if (step.kind === "think") {
-        el.className = "chain-step think";
-        el.innerHTML = `<span class="badge">思考 · R${step.round || "?"}</span><div class="body md-body"></div>`;
+        el.className = "tool-step think";
+        el.innerHTML = `<span class="badge">思考</span><div class="body md-body"></div>`;
         setMarkdown(el.querySelector(".body"), step.text || "");
         return el;
       }
       const sub = step.substrate || substrateFor(step.tool);
-      el.className = "chain-step tool";
+      el.className = "tool-step tool";
       const badge = document.createElement("span");
       badge.className = "badge " + sub;
       badge.textContent = `${sub} · ${step.tool || "?"}`;
@@ -838,35 +1976,40 @@
       const ready = status.has_key;
       const workspace = status.workspace || "";
       Object.keys(toolSubstrates).forEach((k) => delete toolSubstrates[k]);
-      (status.tools || []).forEach((t) => {
-        toolSubstrates[t.name] = t.substrate || "?";
-      });
+      (status.tools || []).forEach((t) => { toolSubstrates[t.name] = t.substrate || "?"; });
       $("#model").textContent = ready
         ? `${status.model} · ${workspace}`
-        : `${status.model} · 缺少 DEEPSEEK_API_KEY · ${workspace}`;
+        : `${status.model} · 缺少 API Key · ${workspace}`;
       $("#model").classList.toggle("warn", !ready);
+      const dot = $("#status-dot");
+      if (dot) {
+        dot.classList.toggle("ok", ready);
+        dot.classList.toggle("warn", !ready);
+      }
       renderPending(status.pending);
       renderPrompts(status.profile || (status.creation ? "creation" : "standard"));
-      updateModeButton(status.profile || (status.creation ? "creation" : "standard"));
+      updateModeSelect(status.profile || (status.creation ? "creation" : "standard"));
+      renderRuntimeSidebar(status);
       return status;
     }
 
-    const PROFILES = ["standard", "coding", "creation"];
+    let modeSwitching = false;
 
-    function updateModeButton(profile) {
-      const btn = $("#mode-btn");
+    function updateModeSelect(profile) {
+      const sel = $("#mode-select");
       const p = profile || "standard";
-      btn.textContent = p === "creation" ? "创造" : p === "coding" ? "编码" : "标准";
-      btn.classList.remove("on", "coding", "creation");
-      if (p === "coding") btn.classList.add("on", "coding");
-      else if (p === "creation") btn.classList.add("on", "creation");
+      modeSwitching = true;
+      sel.value = p;
+      sel.classList.remove("coding", "creation");
+      if (p === "coding") sel.classList.add("coding");
+      else if (p === "creation") sel.classList.add("creation");
+      updateModeIcon(p);
+      modeSwitching = false;
     }
 
-    async function toggleMode() {
-      const status = await (await fetch("/api/status")).json();
-      const current = status.profile || (status.creation ? "creation" : "standard");
-      const idx = PROFILES.indexOf(current);
-      const next = PROFILES[(idx + 1) % PROFILES.length];
+    async function switchMode(next) {
+      if (modeSwitching) return;
+      const prev = $("#mode-select").value;
       const res = await fetch("/api/mode", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -874,20 +2017,19 @@
       });
       const data = await res.json();
       if (!res.ok) {
+        updateModeSelect(prev);
         add("系统", data.error || "切换模式失败", "err");
         return;
       }
       add("系统", data.message || `已切换到${next === "creation" ? "创造" : next === "coding" ? "编码" : "标准"}模式`);
       await refreshStatus();
-      const updated = await (await fetch("/api/status")).json();
-      renderPluginsAndTools(updated);
     }
 
     let selectedPendingId = null;
 
     const DEMO_PROMPTS = [
-      { label: "结构 + 统计", text: "用 outline 和 stats 介绍这篇 demo 文档的结构与字数，再总结四种基质。" },
-      { label: "cite 引用", text: "用 cite 找「可撤销 effect」相关段落，用原文解释。" },
+      { label: "README 结构", text: "用 outline 和 stats 介绍工作区 README.md 的结构与字数，再总结四种基质。" },
+      { label: "cite 引用", text: "用 cite 在 README.md 里找「可组合」相关段落，用原文解释。" },
       { label: "smoke 自检", text: "用 bash 在工作区跑 cargo run -p spatiotemporal-agent -- --smoke，概括输出。" },
       { label: "crates.io", text: "用 web_fetch 抓 https://crates.io/api/v1/crates/spatiotemporal ，说最新版本。" },
     ];
@@ -912,10 +2054,11 @@
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "prompt-chip";
-        btn.textContent = item.label;
+        btn.innerHTML = `<span class="icon icon-sm">${ICONS.spark}</span>${escapeHtml(item.label)}`;
         btn.title = item.text;
         btn.addEventListener("click", () => {
           $("#input").value = item.text;
+          autoResizeTextarea();
           $("#input").focus();
         });
         root.appendChild(btn);
@@ -953,7 +2096,7 @@
     }
 
     async function decide(approve) {
-      const payload = { approve, id: selectedPendingId };
+      const payload = { approve, id: selectedPendingId, session_id: sessionId || undefined };
       if (!approve) {
         const reason = window.prompt("拒绝原因（可选）", "") || "";
         if (reason.trim()) payload.reason = reason.trim();
@@ -970,13 +2113,12 @@
       }
       add("系统", data.message || (approve ? "已批准" : "已拒绝"));
       await refreshStatus();
-      const status = await (await fetch("/api/status")).json();
-      renderPluginsAndTools(status);
+      if (approve && sessionId) await loadSession();
     }
 
     async function boot() {
       try {
-        const status = await refreshStatus();
+        await refreshStatus();
         await loadSessionList();
         if (!sessionId) {
           try {
@@ -986,34 +2128,14 @@
               const latest = (data.sessions || [])[0];
               if (latest?.id) {
                 sessionId = latest.id;
-                localStorage.setItem(SESSION_KEY, sessionId);
+                saveSessionIdForWorkspace();
               }
             }
-          } catch {
-            /* 忽略 */
-          }
+          } catch { /* 忽略 */ }
         }
         await loadSession();
-        renderPluginsAndTools(status);
-        const bus = $("#bus");
-        if (bus) {
-          bus.replaceChildren();
-          (status.plugins || []).forEach((p, i) => {
-            if (i) {
-              const wire = document.createElement("span");
-              wire.className = "wire";
-              bus.appendChild(wire);
-            }
-            const node = document.createElement("span");
-            node.className = "node";
-            node.textContent = p.name;
-            bus.appendChild(node);
-          });
-        }
-        const doc = await (await fetch("/api/doc")).json();
-        setMarkdown($("#doc-text"), doc.text || "");
-        const path = (doc.path || "").split(/[/\\]/).pop();
-        $("#doc-name").textContent = path || "markdown";
+        const status = await refreshStatus();
+        await initWorkspace(status);
       } catch (err) {
         add("系统", "界面初始化失败：" + err, "err");
         console.error(err);
@@ -1022,20 +2144,35 @@
 
     function add(who, text, cls) {
       if (emptyEl && emptyEl.parentNode) emptyEl.remove();
-      const div = document.createElement("div");
-      div.className = "msg " + (cls || "");
-      div.innerHTML = `<div class="who">${escapeHtml(who)}</div><div class="body"></div>`;
-      const body = div.querySelector(".body");
-      const asMarkdown = who === "讲解员" && cls !== "pulse" && cls !== "err";
-      if (asMarkdown) {
-        body.classList.add("md-body");
-        setMarkdown(body, text);
-      } else {
-        body.textContent = text;
+      const isUser = cls === "user";
+      const isErr = cls === "err";
+      const isPulse = cls === "pulse";
+      const row = document.createElement("div");
+      row.className = "msg-row " + (isUser ? "user" : isErr ? "err" : "assistant") + (isPulse ? " pulse" : "");
+
+      if (!isErr) {
+        const avatar = document.createElement("div");
+        avatar.className = "avatar";
+        avatar.innerHTML = `<span class="icon">${isUser ? ICONS.user : ICONS.bot}</span>`;
+        row.appendChild(avatar);
       }
-      logEl.appendChild(div);
-      logEl.scrollTop = logEl.scrollHeight;
-      return div;
+
+      const bubble = document.createElement("div");
+      bubble.className = "msg-bubble";
+      if (isErr) {
+        bubble.innerHTML = `<span class="err-icon icon icon-sm">${ICONS.alert}</span><span>${escapeHtml(text)}</span>`;
+      } else if (isPulse) {
+        bubble.innerHTML = typingDotsHtml();
+      } else if (!isUser) {
+        bubble.classList.add("md-body");
+        setMarkdown(bubble, text);
+      } else {
+        bubble.textContent = text;
+      }
+      row.appendChild(bubble);
+      logEl.appendChild(row);
+      scrollToBottom();
+      return row;
     }
 
     function addTrace(t) {
@@ -1045,7 +2182,7 @@
         substrate: t.substrate,
         input: t.input,
         output: t.output,
-      }]);
+      }], false);
     }
 
     function escapeHtml(s) {
@@ -1058,22 +2195,24 @@
       let raw;
       try {
         raw = marked.parse(src, { gfm: true, breaks: true });
-        if (raw && typeof raw.then === "function") {
-          return escapeHtml(src);
-        }
+        if (raw && typeof raw.then === "function") return escapeHtml(src);
       } catch {
         return escapeHtml(src);
       }
-      if (typeof DOMPurify !== "undefined") {
-        return DOMPurify.sanitize(raw);
-      }
-      return escapeHtml(src);
+      return typeof DOMPurify !== "undefined" ? DOMPurify.sanitize(raw) : escapeHtml(src);
     }
 
     function setMarkdown(el, text) {
       el.innerHTML = renderMarkdown(text);
     }
 
+    function autoResizeTextarea() {
+      const ta = $("#input");
+      ta.style.height = "auto";
+      ta.style.height = Math.min(ta.scrollHeight, 160) + "px";
+    }
+
+    $("#input").addEventListener("input", autoResizeTextarea);
     $("#input").addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
@@ -1087,10 +2226,12 @@
       const text = input.value.trim();
       if (!text) return;
       input.value = "";
+      autoResizeTextarea();
       add("你", text, "user");
-      const btn = $("#form button[type=submit]");
+      const btn = $(".send-btn");
       btn.disabled = true;
-      const wait = add("讲解员", "在跑工具…", "pulse");
+      btn.classList.add("loading");
+      const wait = add("Agent", "", "pulse");
       try {
         const res = await fetch("/api/chat", {
           method: "POST",
@@ -1100,22 +2241,22 @@
         const turn = await res.json();
         wait.remove();
         if (Array.isArray(turn.steps) && turn.steps.length) {
-          const chain = renderChain(turn.steps);
-          if (chain) logEl.appendChild(chain);
+          const chain = renderChain(turn.steps, false);
+          if (chain) appendToolPanel(chain);
         } else {
           (turn.traces || []).forEach((t) => {
             const chain = addTrace(t);
-            if (chain) logEl.appendChild(chain);
+            if (chain) appendToolPanel(chain);
           });
         }
         if (turn.error && !turn.reply) {
           add("系统", turn.error, "err");
         } else {
-          add("讲解员", turn.reply || turn.error || "没有回复");
+          add("Agent", turn.reply || turn.error || "没有回复");
         }
         if (turn.session_id) {
           sessionId = turn.session_id;
-          localStorage.setItem(SESSION_KEY, sessionId);
+          saveSessionIdForWorkspace();
         }
         if (Array.isArray(turn.history)) {
           history.length = 0;
@@ -1131,13 +2272,33 @@
         add("系统", String(err), "err");
       }
       btn.disabled = false;
+      btn.classList.remove("loading");
       input.focus();
     });
 
     $("#approve-btn").addEventListener("click", () => decide(true));
     $("#reject-btn").addEventListener("click", () => decide(false));
-    $("#mode-btn").addEventListener("click", () => toggleMode());
+    $("#mode-select").addEventListener("change", (e) => {
+      if (!modeSwitching) switchMode(e.target.value);
+    });
     $("#new-session-btn").addEventListener("click", () => newSession());
+    $("#tree-up").addEventListener("click", () => {
+      if (treeParent !== null) loadWorkspaceTree(treeParent);
+      else if (treePath) loadWorkspaceTree("");
+    });
+    $("#workspace-toggle").addEventListener("click", toggleWorkspaceDrawer);
+    $("#workspace-backdrop").addEventListener("click", () => setWorkspaceDrawer(false));
+    $("#workspace-select").addEventListener("change", async (e) => {
+      const path = e.target.value;
+      if (!path || path === workspaceRoot) return;
+      try {
+        await switchWorkspace(path);
+      } catch (err) {
+        add("系统", String(err), "err");
+        renderWorkspaceSelect();
+      }
+    });
+    $("#workspace-open").addEventListener("click", () => promptOpenWorkspace());
 
     boot();
   </script>

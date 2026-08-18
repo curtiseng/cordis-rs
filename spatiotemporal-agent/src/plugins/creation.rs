@@ -111,8 +111,9 @@ impl Component for CreationTools {
                 "提交 script 插件安装（同 define_plugin，name=script）",
                 tool_schema::define_script_schema(),
                 {
+                    let runtime = runtime.clone();
                     let approvals = approvals.clone();
-                    move |args| define_plugin(&approvals, args)
+                    move |args| define_plugin(&runtime, &approvals, args)
                 },
             );
             register(
@@ -121,8 +122,9 @@ impl Component for CreationTools {
                 "提交任意 registry 插件安装（script/wasm/process/已有 native），需界面审批",
                 tool_schema::define_plugin_schema(),
                 {
+                    let runtime = runtime.clone();
                     let approvals = approvals.clone();
-                    move |args| define_plugin(&approvals, args)
+                    move |args| define_plugin(&runtime, &approvals, args)
                 },
             );
             register(
@@ -170,7 +172,7 @@ impl Component for CreationTools {
             register(
                 &tools,
                 "save_patch",
-                "把运行时动态 patch 层写入 cordis.patch.yml（合法 YAML）",
+                "把当前会话 patch 导出到 cordis.patch.yml（会话 patch 已自动持久化）",
                 tool_schema::save_patch_schema(),
                 {
                     let runtime = runtime.clone();
@@ -259,7 +261,7 @@ fn json_inspect_config(runtime: &AgentRuntime, args: &str) -> Result<String> {
     Ok(serde_json::to_string_pretty(&items).unwrap_or_else(|_| "[]".into()))
 }
 
-fn define_plugin(approvals: &ApprovalQueue, args: &str) -> Result<String> {
+fn define_plugin(runtime: &AgentRuntime, approvals: &ApprovalQueue, args: &str) -> Result<String> {
     let value = parse_json_args(args)?;
     let id = arg_str(&value, "id")?.to_owned();
     let name = value
@@ -287,6 +289,7 @@ fn define_plugin(approvals: &ApprovalQueue, args: &str) -> Result<String> {
             let lines = source.lines().count();
             let config = json!({ "file": rel, "grant": grant, "role": role.clone() });
             return finish_propose(
+                runtime,
                 approvals,
                 id,
                 "script",
@@ -315,6 +318,7 @@ fn define_plugin(approvals: &ApprovalQueue, args: &str) -> Result<String> {
     let preview = serde_json::to_string_pretty(&config).unwrap_or_else(|_| config.to_string());
     let id_for_summary = id.clone();
     finish_propose(
+        runtime,
         approvals,
         id,
         &name,
@@ -329,6 +333,7 @@ fn define_plugin(approvals: &ApprovalQueue, args: &str) -> Result<String> {
 
 #[allow(clippy::too_many_arguments)]
 fn finish_propose(
+    runtime: &AgentRuntime,
     approvals: &ApprovalQueue,
     id: String,
     kind: &str,
@@ -355,7 +360,9 @@ fn finish_propose(
             name: None,
         },
     ];
+    let session_id = runtime.require_active_session()?;
     let _pending = approvals.propose_install(
+        session_id,
         id.clone(),
         kind.into(),
         summary.clone(),
@@ -387,6 +394,7 @@ fn run_patch(runtime: &AgentRuntime, approvals: &ApprovalQueue, args: &str) -> R
         let preview: String = yaml.chars().take(1200).collect();
         let lines = yaml.lines().count();
         approvals.propose_install(
+            runtime.require_active_session()?,
             id,
             "patch".into(),
             format!("试跑 patch（{} 条）", layer.len()),
@@ -453,9 +461,12 @@ fn save_patch(runtime: &AgentRuntime, args: &str) -> Result<String> {
         .map(PathBuf::from)
         .unwrap_or_else(|| root_dir().join("cordis.patch.yml"));
 
-    let flat: Vec<Patch> = runtime.dynamic_layers().into_iter().flatten().collect();
+    let flat: Vec<Patch> = runtime.session_layers().into_iter().flatten().collect();
     if flat.is_empty() {
-        return Ok("没有运行时动态 patch 可保存（bootstrap / 文件层不含在内）。".into());
+        return Ok(
+            "当前会话没有 patch 可导出（会话 patch 已自动存于 .agent/sessions/*.patch.json）。"
+                .into(),
+        );
     }
 
     let mut out = String::from("# 由 creation-tools 自动生成\n");

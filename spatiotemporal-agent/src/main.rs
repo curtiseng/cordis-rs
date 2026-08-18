@@ -24,6 +24,8 @@ mod runtime;
 mod session;
 mod tool_schema;
 mod util;
+mod workspace;
+mod workspace_store;
 
 use std::fs;
 use std::path::PathBuf;
@@ -35,6 +37,7 @@ use crate::host::root_dir;
 use crate::keys::lookup_surface;
 use crate::registry::{Host, registry};
 use crate::runtime::AgentRuntime;
+use crate::util::resolve_workspace_path;
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -68,9 +71,7 @@ fn main() {
         let path = if path.is_absolute() {
             path.clone()
         } else {
-            std::env::current_dir()
-                .unwrap_or_else(|_| PathBuf::from("."))
-                .join(path)
+            resolve_workspace_path(&path.to_string_lossy())
         };
         layers.push(vec![Patch::config(
             "doc",

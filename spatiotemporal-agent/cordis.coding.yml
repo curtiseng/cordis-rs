@@ -3,7 +3,7 @@
 
 - id: agent-loop
   config:
-    max_rounds: 24
+    max_rounds: 50
     compaction:
       max_messages: 64
       max_chars: 80000

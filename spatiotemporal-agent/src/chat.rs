@@ -76,13 +76,16 @@ pub fn fallback_system_prompt(
         && profile != AgentProfile::Coding
     {
         prompt.push_str(&format!(
-            "当前文档：{doc_path}。可用 read_doc / outline / cite 阅读。\n"
+            "markdown 快照（demo 文档类 tool）：{doc_path}。读工作区其它路径用 read / bash。\n"
         ));
     }
     prompt.push_str(
         "文件操作用 read / write / edit（JSON：path；write 还需 content；edit 还需 old、new）；\
          shell 用 bash（JSON：command，可选 cwd）；网络用 web_fetch（JSON：url）。\
          所有工具参数必须是合法 JSON 对象，字段名与 schema 一致。\n\
+         script/wasm 叶子默认只 grant 能力快照；IO 用 native tool，不要 grant fs；\
+         叶子内编排其它 tool 用 host.callTool / call-tool。\
+         history 过长或 LLM 报 tool 消息格式错误时建议新开会话。\n\
          回答用中文，引用时尽量附上原文或命令输出。不要编造没有依据的内容。\n",
     );
     if profile == AgentProfile::Creation {
@@ -95,7 +98,8 @@ pub fn fallback_system_prompt(
     if profile == AgentProfile::Coding {
         prompt.push_str(
             "【编码模式】专注 read/write/edit/bash；同一文件少重复 read；改完用一条 bash 验证；\
-             不要调用 demo 文档工具（outline/cite/stats/read_doc 已禁用）。\n",
+             不要调用标准/demo 文档类 tool（编码模式已禁用）；\
+             不要 grant fs 给 script/wasm，IO 直接用 native tool。\n",
         );
     }
     prompt
