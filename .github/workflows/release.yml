@@ -57,7 +57,7 @@ jobs:
 
       - name: Smoke test
         shell: bash
-        run: "../target/${{ matrix.target }}/release/${{ matrix.bin }}" --smoke
+        run: '../target/${{ matrix.target }}/release/${{ matrix.bin }} --smoke'
         working-directory: spatiotemporal-agent
 
       - name: Package archive
