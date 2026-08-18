@@ -38,6 +38,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Add cross-compilation targets
+        shell: bash
         run: |
           rustup target add wasm32-wasip2
           if [ "${{ matrix.target }}" = "x86_64-apple-darwin" ]; then
@@ -49,6 +50,7 @@ jobs:
           workspaces: spatiotemporal-agent
 
       - name: Build wasm guest
+        shell: bash
         run: ./scripts/build-guests.sh
         working-directory: spatiotemporal-agent
 
