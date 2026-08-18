@@ -42,7 +42,7 @@ cargo run -p spatiotemporal-agent
 
 ### Session
 
-刷新后 **API history** 会从 localStorage + `.agent/sessions/` 恢复（供下一轮对话），但**中间聊天记录 UI 不会重放**；可连续多轮追问「刚才 stats 的结果是多少」。
+刷新后 **history** 与 **工具链路 UI** 会从 localStorage + `.agent/sessions/` 恢复；可连续多轮追问「刚才 stats 的结果是多少」，或在左栏切到别的会话。
 
 ---
 

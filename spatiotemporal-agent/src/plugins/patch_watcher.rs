@@ -63,11 +63,13 @@ impl Component for PatchWatcher {
 
             thread::spawn(move || {
                 let (event_tx, event_rx) = mpsc::channel();
-                let mut watcher = match notify::recommended_watcher(move |result: notify::Result<notify::Event>| {
-                    if result.is_ok() {
-                        let _ = event_tx.send(());
-                    }
-                }) {
+                let mut watcher = match notify::recommended_watcher(
+                    move |result: notify::Result<notify::Event>| {
+                        if result.is_ok() {
+                            let _ = event_tx.send(());
+                        }
+                    },
+                ) {
                     Ok(watcher) => watcher,
                     Err(error) => {
                         eprintln!("patch-watcher 启动失败：{error}");

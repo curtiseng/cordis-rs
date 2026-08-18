@@ -1,6 +1,6 @@
 use std::io::{BufRead, BufReader, Read, Write};
-use std::sync::{Arc, Mutex};
 use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use serde_json::{Value, json};
@@ -41,11 +41,7 @@ pub struct Session<R: Read + Send + 'static> {
 }
 
 impl<R: Read + Send + 'static> Session<R> {
-    pub fn new(
-        stdin: impl Write + Send + 'static,
-        stdout: R,
-        io_timeout: Duration,
-    ) -> Self {
+    pub fn new(stdin: impl Write + Send + 'static, stdout: R, io_timeout: Duration) -> Self {
         Session {
             stdin: Arc::new(Mutex::new(Box::new(stdin))),
             stdout: Arc::new(Mutex::new(BufReader::new(stdout))),
@@ -160,14 +156,12 @@ pub fn take_tools(response: &Value) -> Vec<(String, String)> {
 }
 
 pub fn take_llm(response: &Value) -> Option<String> {
-    response
-        .get("llm")
-        .and_then(|value| match value {
-            Value::Null => None,
-            Value::String(text) if text.is_empty() => None,
-            Value::String(text) => Some(text.clone()),
-            _ => None,
-        })
+    response.get("llm").and_then(|value| match value {
+        Value::Null => None,
+        Value::String(text) if text.is_empty() => None,
+        Value::String(text) => Some(text.clone()),
+        _ => None,
+    })
 }
 
 pub fn take_result(response: &Value) -> Result<String> {

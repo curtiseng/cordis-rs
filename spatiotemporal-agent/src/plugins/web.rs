@@ -203,10 +203,7 @@ fn serve(ctx: ServeContext<'_>) {
                 json_ok(json!({ "session_id": id }))
             },
             (Method::Get, "/api/session") => {
-                let session_id = query
-                    .get("session_id")
-                    .cloned()
-                    .unwrap_or_default();
+                let session_id = query.get("session_id").cloned().unwrap_or_default();
                 if session_id.is_empty() {
                     json_err(400, "缺少 session_id")
                 } else if !session::valid_session_id(&session_id) {
@@ -256,22 +253,28 @@ fn serve(ctx: ServeContext<'_>) {
                     .and_then(Value::as_str)
                     .and_then(AgentProfile::parse)
                     .or_else(|| {
-                        payload.get("creation").and_then(Value::as_bool).map(|enabled| {
-                            if enabled {
-                                AgentProfile::Creation
-                            } else {
-                                AgentProfile::Standard
-                            }
-                        })
+                        payload
+                            .get("creation")
+                            .and_then(Value::as_bool)
+                            .map(|enabled| {
+                                if enabled {
+                                    AgentProfile::Creation
+                                } else {
+                                    AgentProfile::Standard
+                                }
+                            })
                     })
                     .or_else(|| {
-                        payload.get("coding").and_then(Value::as_bool).map(|enabled| {
-                            if enabled {
-                                AgentProfile::Coding
-                            } else {
-                                AgentProfile::Standard
-                            }
-                        })
+                        payload
+                            .get("coding")
+                            .and_then(Value::as_bool)
+                            .map(|enabled| {
+                                if enabled {
+                                    AgentProfile::Coding
+                                } else {
+                                    AgentProfile::Standard
+                                }
+                            })
                     });
                 match profile {
                     None => json_err(
@@ -326,8 +329,8 @@ fn serve(ctx: ServeContext<'_>) {
                 } else if user.is_empty() {
                     json_err(400, "空消息")
                 } else {
-                    let mut prior = session::derive_messages(workspace_path, &session_id)
-                        .unwrap_or_default();
+                    let mut prior =
+                        session::derive_messages(workspace_path, &session_id).unwrap_or_default();
                     if prior.is_empty() && !client_history.is_empty() {
                         prior = client_history;
                     }

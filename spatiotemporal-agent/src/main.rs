@@ -86,12 +86,7 @@ fn main() {
     let host = Host::new();
     let app = App::new();
     let loader = Loader::new(app.root(), registry(host.clone()));
-    let runtime = Rc::new(AgentRuntime::new(
-        app,
-        loader,
-        base,
-        layers,
-    ));
+    let runtime = Rc::new(AgentRuntime::new(app, loader, base, layers));
     *host.runtime.borrow_mut() = Some(runtime.clone());
 
     let patch_path = root_dir().join("cordis.patch.yml");

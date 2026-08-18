@@ -69,10 +69,7 @@ impl SystemPrompt for PromptService {
         {
             let trimmed = text.trim();
             if !trimmed.is_empty() {
-                sections.push(format!(
-                    "## 项目指令（{}）\n{trimmed}",
-                    self.agents_file
-                ));
+                sections.push(format!("## 项目指令（{}）\n{trimmed}", self.agents_file));
             }
         }
 

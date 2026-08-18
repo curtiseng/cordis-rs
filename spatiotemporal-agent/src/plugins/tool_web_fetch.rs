@@ -82,7 +82,10 @@ fn fetch_url(args: &str) -> Result<String> {
     {
         String::from_utf8_lossy(&body).into_owned()
     } else {
-        format!("[二进制内容，{} 字节，Content-Type: {content_type}]", body.len())
+        format!(
+            "[二进制内容，{} 字节，Content-Type: {content_type}]",
+            body.len()
+        )
     };
 
     let mut out = format!("status={status}\ncontent-type={content_type}\nurl={url}\n\n{text}");

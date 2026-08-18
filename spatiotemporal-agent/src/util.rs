@@ -72,9 +72,8 @@ pub fn parse_json_args(args: &str) -> spatiotemporal::Result<serde_json::Value> 
     if args.trim().is_empty() {
         return Ok(serde_json::json!({}));
     }
-    serde_json::from_str(args).map_err(|error| {
-        spatiotemporal::Error::Component(format!("参数不是合法 JSON：{error}"))
-    })
+    serde_json::from_str(args)
+        .map_err(|error| spatiotemporal::Error::Component(format!("参数不是合法 JSON：{error}")))
 }
 
 pub fn arg_str<'a>(value: &'a serde_json::Value, key: &str) -> spatiotemporal::Result<&'a str> {

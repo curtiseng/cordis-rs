@@ -21,9 +21,7 @@ pub fn session_path(workspace: &Path, id: &str) -> PathBuf {
 }
 
 pub fn valid_session_id(id: &str) -> bool {
-    id.starts_with("s-")
-        && id.len() > 2
-        && id[2..].chars().all(|c| c.is_ascii_hexdigit())
+    id.starts_with("s-") && id.len() > 2 && id[2..].chars().all(|c| c.is_ascii_hexdigit())
 }
 
 pub fn new_session_id() -> String {

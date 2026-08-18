@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use spatiotemporal::Key;
 
-use crate::host::{Document, Fs, Llm, Shell, Surface, SystemPrompt, AgentLoop};
+use crate::host::{AgentLoop, Document, Fs, Llm, Shell, Surface, SystemPrompt};
 
 pub(crate) enum Doc {}
 impl Key for Doc {

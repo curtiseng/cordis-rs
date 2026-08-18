@@ -76,7 +76,7 @@ cargo run -p spatiotemporal-agent -- --creation   # 启动即创造模式
 
 **左栏**：**plugins** = 已挂载 fiber 组件；**tools** = LLM 可调用的函数（native 常一对多，script/wasm 叶子常与插件同名）。完整配置树用创造模式 `inspect_config` 查看。
 
-多轮对话会保留 tool 消息，模型能记住之前调用了哪些工具。会话持久化到工作区 `.agent/sessions/*.jsonl`（浏览器 localStorage 保存 session id；**history 供 API 恢复，刷新后聊天 UI 不重放**）。`agent-loop` 会在上下文过长时按 `cordis.yml` 的 `compaction` 配置压缩 history（截断 tool 输出、保留最近 N 条）。
+多轮对话会保留 tool 消息，模型能记住之前调用了哪些工具。会话持久化到工作区 `.agent/sessions/*.jsonl`（浏览器 localStorage 记当前 session id；**刷新后从 JSONL 重建聊天 UI 与工具链路**）。左栏可**新开会话**、切换历史会话。`agent-loop` 会在上下文过长时按 `cordis.yml` 的 `compaction` 配置压缩 history（截断 tool 输出、保留最近 N 条）。
 
 在工作区根目录放 `AGENTS.md` 可注入项目级指令；`system-prompt` 插件还会把各工具的 JSON schema 写进 system prompt。
 

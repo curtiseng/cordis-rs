@@ -36,10 +36,10 @@ impl Component for ToolFs {
                 "读取工作区内的文本文件",
                 tool_schema::read_schema(),
                 move |args| {
-                let value = parse_json_args(args)?;
-                let path = arg_str(&value, "path")?;
-                let bytes = fs::read(resolve_within(&root_read, path)?).map_err(map_io)?;
-                Ok(String::from_utf8_lossy(&bytes).into_owned())
+                    let value = parse_json_args(args)?;
+                    let path = arg_str(&value, "path")?;
+                    let bytes = fs::read(resolve_within(&root_read, path)?).map_err(map_io)?;
+                    Ok(String::from_utf8_lossy(&bytes).into_owned())
                 },
             );
 

@@ -173,7 +173,13 @@ impl Toolbox {
     }
 
     pub fn insert(&self, name: String, description: String, substrate: &str, invoke: Invoke) {
-        self.insert_with_schema(name, description, substrate, tool_schema::text_query("工具输入"), invoke);
+        self.insert_with_schema(
+            name,
+            description,
+            substrate,
+            tool_schema::text_query("工具输入"),
+            invoke,
+        );
     }
 
     pub fn insert_with_schema(

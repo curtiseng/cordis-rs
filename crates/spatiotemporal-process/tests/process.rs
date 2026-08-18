@@ -111,12 +111,15 @@ fn only_granted_capabilities_are_visible() {
     let mut app = App::new();
     let root = app.root();
     root.use_component(postgres());
-    root.use_component(Rc::new(FnComponent::new("vault", |ctx: Context, _steps| {
-        Box::pin(async move {
-            ctx.set::<SecretsKey>(Rc::new(TokenVault("secret-token")));
-            Ok(())
-        })
-    })));
+    root.use_component(Rc::new(FnComponent::new(
+        "vault",
+        |ctx: Context, _steps| {
+            Box::pin(async move {
+                ctx.set::<SecretsKey>(Rc::new(TokenVault("secret-token")));
+                Ok(())
+            })
+        },
+    )));
     app.settle();
 
     let plugin = probe(vec!["db".to_owned()]);

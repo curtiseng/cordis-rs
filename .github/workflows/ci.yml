@@ -74,7 +74,7 @@ jobs:
       - run: cargo clippy -p spatiotemporal-process --all-targets -- -D warnings
       - run: cargo test -p spatiotemporal-process
 
-  # 三种基质的 agent 例子：编 outline.wasm，按 cordis.yml 装配，--smoke 叠一层
+  # agent：编 outline.wasm，按 cordis.yml 装配，--smoke 叠一层
   # patch 把 LLM 换成脚本 echo、界面换成 probe。不调真实 LLM。
   agent:
     runs-on: ubuntu-latest
@@ -83,8 +83,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-wasip2
-          components: clippy
+          components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
       - run: ./scripts/build-guests.sh
         working-directory: spatiotemporal-agent
       - run: cargo clippy -p spatiotemporal-agent --all-targets -- -D warnings

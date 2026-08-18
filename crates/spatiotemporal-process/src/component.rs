@@ -204,18 +204,14 @@ impl Component for ProcessPlugin {
             let registered = take_tools(&load);
             let model = take_llm(&load);
 
-            let live = Rc::new(RefCell::new(Live {
-                child,
-                session,
-            }));
+            let live = Rc::new(RefCell::new(Live { child, session }));
 
             if let Some(host) = &tools {
                 for (tool_name, description) in registered {
                     let live = live.clone();
                     let invoke_name = tool_name.clone();
-                    let invoke: ToolInvoke = Rc::new(move |args: &str| {
-                        live.borrow_mut().invoke(&invoke_name, args)
-                    });
+                    let invoke: ToolInvoke =
+                        Rc::new(move |args: &str| live.borrow_mut().invoke(&invoke_name, args));
                     host.register(tool_name.clone(), description, invoke);
                     let host = host.clone();
                     steps.step_sync(move || host.unregister(&tool_name))?;
@@ -266,9 +262,7 @@ struct Live {
 impl Live {
     fn invoke(&mut self, name: &str, args: &str) -> Result<String> {
         let id = self.session.next_id();
-        let response = self
-            .session
-            .transact(invoke_request(id, name, args))?;
+        let response = self.session.transact(invoke_request(id, name, args))?;
         take_result(&response)
     }
 }

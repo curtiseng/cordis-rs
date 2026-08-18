@@ -45,7 +45,12 @@ pub struct AgentRuntime {
 }
 
 impl AgentRuntime {
-    pub fn new(app: App, loader: Loader, base: Vec<Entry>, bootstrap_layers: Vec<Vec<Patch>>) -> Self {
+    pub fn new(
+        app: App,
+        loader: Loader,
+        base: Vec<Entry>,
+        bootstrap_layers: Vec<Vec<Patch>>,
+    ) -> Self {
         AgentRuntime {
             app: RefCell::new(app),
             loader,
@@ -118,9 +123,7 @@ impl AgentRuntime {
 
     pub fn apply(&self) -> Result<Applied> {
         let entries = self.current_entries()?;
-        self.app
-            .borrow_mut()
-            .block_on(self.loader.apply(entries))
+        self.app.borrow_mut().block_on(self.loader.apply(entries))
     }
 
     fn profile_patch_path(&self, profile: AgentProfile) -> Option<&Path> {

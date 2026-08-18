@@ -5,23 +5,23 @@ use std::rc::Rc;
 use std::sync::mpsc::{Receiver, Sender};
 
 use spatiotemporal::{Component, Error, Registry, Value};
-use spatiotemporal_script::ScriptPlugin;
 use spatiotemporal_process::ProcessPlugin;
+use spatiotemporal_script::ScriptPlugin;
 use spatiotemporal_wasm::WasmPlugin;
 
 use crate::approval::ApprovalQueue;
-use crate::host::{
-    Announcing, LlmInstaller, Roster, Toolbox, config_str, grant_list, process_caps,
-    process_guest, resolve_path, script_caps, wasm_caps, wasm_guest,
-};
 use crate::host::root_dir;
+use crate::host::{
+    Announcing, LlmInstaller, Roster, Toolbox, config_str, grant_list, process_caps, process_guest,
+    resolve_path, script_caps, wasm_caps, wasm_guest,
+};
 use crate::plugins::approval_policy_component;
 use crate::plugins::{
     AgentLoopPlugin, BashSandbox, CreationTools, DeepSeek, DocFile, FsSandbox, PatchWatcher, Probe,
     ReadDoc, SystemPromptPlugin, ToolBash, ToolFs, ToolWebFetch, Web,
 };
-use crate::util::default_workspace_root;
 use crate::runtime::AgentRuntime;
+use crate::util::default_workspace_root;
 
 #[derive(Clone)]
 pub struct Host {
@@ -389,12 +389,7 @@ pub fn registry(host: Host) -> Registry {
                 })
                 .unwrap_or_default();
             let plugin = ProcessPlugin::open(&path, host.process_caps.clone(), grant_list(config))
-                .map_err(|error| {
-                    Error::Config(format!(
-                        "打不开 {}：{error}",
-                        path.display()
-                    ))
-                })?
+                .map_err(|error| Error::Config(format!("打不开 {}：{error}", path.display())))?
                 .with_args(args)
                 .with_tools(Rc::new(host.tools.clone()) as Rc<dyn spatiotemporal_process::ToolHost>)
                 .with_llm(host.llm_process.clone());

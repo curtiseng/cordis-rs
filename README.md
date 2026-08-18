@@ -23,6 +23,29 @@ impl Component for Worker {
 
 提供者被换掉时，这个组件自己会去激活、重新激活，且顺序有保证——它不需要写任何卸载路径，也不需要监听任何事件。`cargo run --example swap_provider` 能看到全过程。
 
+## 试试 Agent
+
+[`spatiotemporal-agent/`](spatiotemporal-agent/) 是演算之上的**插件化 agent harness**，形态对齐 [DeepSeek Harness (dsh)](https://github.com/deepseek-ai/deepseek-harness)：**文档、工具、LLM、界面全是 `cordis.yml` 里的一行行 fiber**，换实现 = `disabled` + `insert`，不必改宿主代码。
+
+![Agent Web UI：插件树、工具链路、Markdown 文档](spatiotemporal-agent/assets/ui.jpg)
+
+```bash
+rustup target add wasm32-wasip2
+./spatiotemporal-agent/scripts/build-guests.sh   # outline.wasm
+export DEEPSEEK_API_KEY=sk-…
+cargo run -p spatiotemporal-agent                # http://127.0.0.1:8787
+```
+
+| 能力 | 说明 |
+|---|---|
+| **四种基质** | 同一棵 fiber 树里 native / wasm / script / process 叶子并存（`outline`、`cite`、`stats`、`bash`…） |
+| **三档 profile** | 标准 demo → **编码**（`--coding`，24 轮 tool、注入 `CODING.prompt.md`）→ **创造**（热装 script、`define_script` 走审批） |
+| **工具链路可视化** | 每轮展示思考步骤 + 工具调用时间线；步骤持久化到 session JSONL |
+| **多会话** | 左栏列表切换 / 新开会话；刷新后从 `.agent/sessions/*.jsonl` 重建 UI |
+| **配置热对账** | 浏览器或 `POST /api/mode` 切换 profile，无需重启进程 |
+
+无 API key 时用 `cargo run -p spatiotemporal-agent -- --smoke`（LLM 换 echo、界面换 probe，CI 同命令）。启动细节、环境变量、试玩脚本见 [`spatiotemporal-agent/README.md`](spatiotemporal-agent/README.md) 与 [`DEMO.md`](spatiotemporal-agent/DEMO.md)。
+
 ## 三个概念
 
 **可撤销 effect。** 每个改动上下文的动作都配一个逆，逆是值（`Inverse`），卸载时按 LIFO 回放。这是上下文被改动的唯一原语：coeffect 供给与组件实例化都归约到它，所以经由上下文做的任何事都被自动追踪。
@@ -47,10 +70,14 @@ Cargo.toml                      # 内核，同时是 workspace 根
 src/ tests/ examples/
 crates/spatiotemporal-wasm/     # wasm 基质适配器，独立版本、独立发布
 crates/spatiotemporal-script/   # QuickJS 脚本基质，模型现写的代码走这里
-spatiotemporal-agent/           # 例子：一切都是插件（不发布）
+crates/spatiotemporal-process/  # 子进程（NDJSON stdio）基质
+spatiotemporal-agent/           # 插件化 agent harness + Web UI（不发布 crates.io）
+  cordis.yml / cordis.*.yml     # 组合与 profile patch（标准 / 编码 / 创造 / smoke）
+  assets/index.html             # 浏览器 UI（工具链路、多会话）
+  .agent/sessions/              # 运行时 JSONL 会话（工作区内，不入库）
 ```
 
-`default-members` 只含内核，所以 `cargo test` 不会去编 wasmtime 或 QuickJS——内核有 5 个依赖，而 wasmtime / rquickjs 各自再带一大坨。整个 workspace 的 MSRV 统一为 **1.94**（wasmtime 47 的要求）。
+`default-members` 只含内核，所以 `cargo test` 不会去编 wasmtime 或 QuickJS——内核有 5 个依赖，而 wasmtime / rquickjs 各自再带一大坨。**Agent 单独编**：`cargo run -p spatiotemporal-agent`（见上一节）。整个 workspace 的 MSRV 统一为 **1.94**（wasmtime 47 的要求）。
 
 ## 配置热重载
 
@@ -219,33 +246,20 @@ cd crates/spatiotemporal-process
 cargo test -p spatiotemporal-process
 ```
 
-## Spatiotemporal Agent
+## Agent 细节
 
-`spatiotemporal-agent/` 在仓库根上。宿主几乎什么都不做：建一张 `Registry`，用 `Loader` 把 `cordis.yml` 对账成一棵 fiber 树。文档、工具、LLM、界面都是插件，基质可以是 native / wasm / script / process。换实现跟 dsh 一样——关掉旧行再 `insert` 新行，见 `cordis.smoke.yml`。
+[`spatiotemporal-agent/README.md`](spatiotemporal-agent/README.md) 列出完整 `cordis.yml` 插件表、创造模式审批与 compaction 配置。下面是常用 `name` 与基质对照（换实现见 `cordis.smoke.yml`）：
 
 | 配置里的 `name` | 基质 | 提供 |
 |---|---|---|
 | `doc` / `read-doc` | native | `markdown` 能力，登记「读全文」 |
 | `wasm`（outline） | wasm | 抽标题大纲 |
-| `script`（cite） | script | 按关键词引用原文 |
-| `deepseek` | native | `llm`（DeepSeek） |
-| `script`（echo） | script | `llm`（不调网络，smoke 用） |
-| `web` | native | `surface`（浏览器） |
-| `probe` | native | `surface`（打印工具并退出） |
+| `script`（cite / stats） | script | 引用原文、统计字数 |
+| `deepseek` / `echo` | native / script | `llm`（HTTP 或 smoke echo） |
+| `web` / `probe` | native | `surface`（浏览器或 CLI 探测） |
+| `creation-tools` | native | 创造模式元工具（`inspect_*`、`define_script`…） |
 
-启动步骤、环境变量和常见问题见 [`spatiotemporal-agent/README.md`](spatiotemporal-agent/README.md)。API Key 只放进环境变量，不要写进 yaml 或提交到 git。
-
-```bash
-cd spatiotemporal-agent
-./scripts/build-guests.sh
-export DEEPSEEK_API_KEY=sk-你的key
-cargo run -p spatiotemporal-agent
-# 打开 http://127.0.0.1:8787
-```
-
-`--smoke` 叠一层 patch：DeepSeek 换成 echo、Web 换成 probe。不调真实 LLM、不听端口。CI 用这个。
-
-
+API Key 只放进环境变量，不要写进 yaml 或提交到 git。
 ## 与论文的对应
 
 | 论文 | 这里 |

@@ -395,9 +395,7 @@ fn run_patch(runtime: &AgentRuntime, approvals: &ApprovalQueue, args: &str) -> R
             layer,
             None,
         )?;
-        return Ok(
-            "已提交 patch 试跑请求。请用户在浏览器界面点击「批准」后才会热装。".into(),
-        );
+        return Ok("已提交 patch 试跑请求。请用户在浏览器界面点击「批准」后才会热装。".into());
     }
 
     let applied = runtime.push_layer(layer)?;
@@ -463,7 +461,11 @@ fn save_patch(runtime: &AgentRuntime, args: &str) -> Result<String> {
     let mut out = String::from("# 由 creation-tools 自动生成\n");
     out.push_str(&patch_yaml::render_patches(&flat)?);
     fs::write(&path, out).map_err(map_io)?;
-    Ok(format!("已写入 {}（{} 条 patch）", path.display(), flat.len()))
+    Ok(format!(
+        "已写入 {}（{} 条 patch）",
+        path.display(),
+        flat.len()
+    ))
 }
 
 fn map_io(error: std::io::Error) -> spatiotemporal::Error {

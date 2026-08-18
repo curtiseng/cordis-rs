@@ -199,17 +199,13 @@ impl ApprovalQueue {
     fn find_pending(&self, id: Option<&str>) -> Result<usize> {
         let queue = self.pending.borrow();
         if queue.is_empty() {
-            return Err(spatiotemporal::Error::Component(
-                "没有待审批的安装".into(),
-            ));
+            return Err(spatiotemporal::Error::Component("没有待审批的安装".into()));
         }
         match id {
             Some(id) => queue
                 .iter()
                 .position(|item| item.install.id == id)
-                .ok_or_else(|| {
-                    spatiotemporal::Error::Component(format!("找不到待审批项 `{id}`"))
-                }),
+                .ok_or_else(|| spatiotemporal::Error::Component(format!("找不到待审批项 `{id}`"))),
             None => Ok(0),
         }
     }
@@ -239,9 +235,8 @@ fn append_audit(workspace: &Path, record: &AuditRecord) -> Result<()> {
         .append(true)
         .open(&path)
         .map_err(map_io)?;
-    serde_json::to_writer(&mut file, record).map_err(|error| {
-        spatiotemporal::Error::Component(format!("审批审计写入失败：{error}"))
-    })?;
+    serde_json::to_writer(&mut file, record)
+        .map_err(|error| spatiotemporal::Error::Component(format!("审批审计写入失败：{error}")))?;
     file.write_all(b"\n").map_err(map_io)?;
     Ok(())
 }
